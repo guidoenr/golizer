@@ -14,6 +14,7 @@ It keeps the same DSP ideas (PortAudio capture + FFT-based analyzer + beat detec
 - CLI flags for resolution, FPS, palette, audio device, buffer size, synthetic audio mode, and audio-triggered colour bursts.
 - Automatic PortAudio device discovery with `--list-audio-devices`, smart default scoring, and a quick audio-activity probe to latch onto the device that’s actually producing signal.
 - Quality presets via `--quality` (`auto`, `high`, `balanced`, `eco`) that pick lighter palettes/patterns and softer math paths for Raspberry Pi and other low-power CPUs.
+- Automatic visual shuffle every 10 seconds (same as tapping `R`), configurable via `--auto-randomize` and `--randomize-interval`.
 - Live visual randomiser (`R`) and keyboard quit (`Q` / `Esc`) bindings.
 - One-shot bootstrap script (`scripts/install_rpi.sh`) for Debian 12 / Raspberry Pi 4 environments that installs Go, PortAudio headers, and builds the binary.
 
@@ -52,6 +53,12 @@ It keeps the same DSP ideas (PortAudio capture + FFT-based analyzer + beat detec
    ./golizer --color-on-audio
    ```
    Colour-on-audio is on by default; add `--color-on-audio=false` if you want constant colour.
+1. **Disable or tweak auto randomiser**:
+   ```bash
+   ./golizer --auto-randomize=false
+   ./golizer --randomize-interval=5s
+   ```
+   By default the visuals shuffle every 10 seconds, just like pressing `R`.
 
 ### Raspberry Pi quickstart
 

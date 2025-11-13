@@ -34,6 +34,8 @@ func main() {
 		colorBurst = flag.Bool("color-on-audio", true, "Fade from monochrome to color based on audio energy")
 		noColor    = flag.Bool("no-color", false, "Disable ANSI color output")
 		quality    = flag.String("quality", "auto", "Quality preset (auto|high|balanced|eco)")
+		autoRandom = flag.Bool("auto-randomize", true, "Automatically randomize visuals periodically")
+		randomFreq = flag.Duration("randomize-interval", 10*time.Second, "Interval between automatic visual randomization")
 	)
 
 	flag.Parse()
@@ -129,20 +131,22 @@ func main() {
 	}
 
 	appConfig := app.Config{
-		DeviceName:    *deviceName,
-		Width:         *width,
-		Height:        *height,
-		TargetFPS:     targetFPSValue,
-		BufferSize:    *bufferSize,
-		DisableAudio:  *noAudio,
-		ShowStatusBar: *showStatus,
-		Palette:       paletteName,
-		Pattern:       patternName,
-		ColorMode:     colorModeName,
-		ColorOnAudio:  *colorBurst,
-		UseANSI:       !*noColor,
-		Quality:       qualityName,
-		Log:           logger,
+		DeviceName:     *deviceName,
+		Width:          *width,
+		Height:         *height,
+		TargetFPS:      targetFPSValue,
+		BufferSize:     *bufferSize,
+		DisableAudio:   *noAudio,
+		ShowStatusBar:  *showStatus,
+		Palette:        paletteName,
+		Pattern:        patternName,
+		ColorMode:      colorModeName,
+		ColorOnAudio:   *colorBurst,
+		UseANSI:        !*noColor,
+		Quality:        qualityName,
+		AutoRandomize:  *autoRandom,
+		RandomInterval: *randomFreq,
+		Log:            logger,
 	}
 
 	a, err := app.New(appConfig)

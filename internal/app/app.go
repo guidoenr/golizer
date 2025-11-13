@@ -20,22 +20,22 @@ import (
 
 // Config configures the application runtime.
 type Config struct {
-	DeviceName    string
-	Width         int
-	Height        int
-	TargetFPS     float64
-	BufferSize    int
-	DisableAudio  bool
-	ShowStatusBar bool
-	Palette       string
-	Pattern       string
-	ColorMode     string
-	ColorOnAudio  bool
-	UseANSI       bool
-	Quality       string
-	AutoRandomize bool
+	DeviceName     string
+	Width          int
+	Height         int
+	TargetFPS      float64
+	BufferSize     int
+	DisableAudio   bool
+	ShowStatusBar  bool
+	Palette        string
+	Pattern        string
+	ColorMode      string
+	ColorOnAudio   bool
+	UseANSI        bool
+	Quality        string
+	AutoRandomize  bool
 	RandomInterval time.Duration
-	Log           *log.Logger
+	Log            *log.Logger
 }
 
 type inputEvent int
