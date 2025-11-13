@@ -12,7 +12,7 @@ It keeps the same DSP ideas (PortAudio capture + FFT-based analyzer + beat detec
 - Parallel row renderer that fans out across CPU cores using goroutines for faster ASCII conversion.
 - Full-screen alternate-buffer rendering that restores the terminal state on exit.
 - CLI flags for resolution, FPS, palette, audio device, buffer size, synthetic audio mode, and audio-triggered colour bursts.
-- Automatic PortAudio device discovery with `--list-audio-devices` and smart default selection for “monitor/loopback” style inputs.
+- Automatic PortAudio device discovery with `--list-audio-devices`, smart default scoring, and a quick audio-activity probe to latch onto the device that’s actually producing signal.
 - Live visual randomiser (`R`) and keyboard quit (`Q` / `Esc`) bindings.
 - One-shot bootstrap script (`scripts/install_rpi.sh`) for Debian 12 / Raspberry Pi 4 environments that installs Go, PortAudio headers, and builds the binary.
 

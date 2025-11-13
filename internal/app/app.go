@@ -67,7 +67,7 @@ type App struct {
 // New constructs the application using the provided configuration.
 func New(cfg Config) (*App, error) {
 	if cfg.TargetFPS <= 0 {
-		cfg.TargetFPS = 20
+		cfg.TargetFPS = 90
 	}
 	if cfg.Log == nil {
 		cfg.Log = log.New(os.Stdout, "", log.LstdFlags)

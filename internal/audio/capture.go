@@ -2,9 +2,12 @@ package audio
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/gordonklaus/portaudio"
 )
@@ -29,6 +32,11 @@ type Config struct {
 }
 
 const defaultBufferSize = 4096
+const (
+	activityProbeDuration   = 850 * time.Millisecond
+	activitySilenceThresh   = 8e-5
+	maxActivityProbeDevices = 5
+)
 
 // NewCapture opens a PortAudio stream using the provided configuration.
 func NewCapture(cfg Config) (*Capture, error) {
@@ -174,27 +182,46 @@ func findDevice(name string) (*portaudio.DeviceInfo, error) {
 		return findDeviceByName(name)
 	}
 
-	if dev, err := portaudio.DefaultInputDevice(); err == nil && dev != nil && dev.MaxInputChannels > 0 {
-		return dev, nil
-	}
-
-	if host, err := portaudio.DefaultHostApi(); err == nil {
-		if host != nil && host.DefaultInputDevice != nil && host.DefaultInputDevice.MaxInputChannels > 0 {
-			return host.DefaultInputDevice, nil
-		}
-	}
-
 	devices, err := portaudio.Devices()
 	if err != nil {
 		return nil, fmt.Errorf("list audio devices: %w", err)
 	}
 
-	candidate := pickBestDevice(devices)
-	if candidate != nil {
-		return candidate, nil
+	candidates := make([]*portaudio.DeviceInfo, 0, len(devices))
+
+	appendUnique := func(dev *portaudio.DeviceInfo) {
+		if dev == nil || dev.MaxInputChannels <= 0 {
+			return
+		}
+		for _, existing := range candidates {
+			if existing == dev || existing.Index == dev.Index {
+				return
+			}
+		}
+		candidates = append(candidates, dev)
 	}
 
-	return nil, fmt.Errorf("no suitable audio input device found")
+	if dev, err := portaudio.DefaultInputDevice(); err == nil && dev != nil {
+		appendUnique(dev)
+	}
+
+	if host, err := portaudio.DefaultHostApi(); err == nil && host != nil && host.DefaultInputDevice != nil {
+		appendUnique(host.DefaultInputDevice)
+	}
+
+	for _, dev := range rankDevices(devices) {
+		appendUnique(dev)
+	}
+
+	if len(candidates) == 0 {
+		return nil, fmt.Errorf("no suitable audio input device found")
+	}
+
+	if active := selectActiveDevice(candidates); active != nil {
+		return active, nil
+	}
+
+	return candidates[0], nil
 }
 
 func findDeviceByName(name string) (*portaudio.DeviceInfo, error) {
@@ -217,16 +244,14 @@ func findDeviceByName(name string) (*portaudio.DeviceInfo, error) {
 	return nil, fmt.Errorf("audio device %q not found", name)
 }
 
-func pickBestDevice(devices []*portaudio.DeviceInfo) *portaudio.DeviceInfo {
+func rankDevices(devices []*portaudio.DeviceInfo) []*portaudio.DeviceInfo {
 	type scored struct {
 		dev   *portaudio.DeviceInfo
 		score int
 	}
 
-	var (
-		results  []scored
-		keywords = []string{"monitor", "loopback", "mix", "stereo mix", "what u hear"}
-	)
+	results := make([]scored, 0, len(devices))
+	keywords := []string{"monitor", "loopback", "mix", "stereo mix", "what u hear"}
 
 	var defaultInputIndex = -1
 	if def, err := portaudio.DefaultInputDevice(); err == nil && def != nil {
@@ -267,10 +292,6 @@ func pickBestDevice(devices []*portaudio.DeviceInfo) *portaudio.DeviceInfo {
 		results = append(results, scored{dev: d, score: score})
 	}
 
-	if len(results) == 0 {
-		return nil
-	}
-
 	sort.Slice(results, func(i, j int) bool {
 		if results[i].score == results[j].score {
 			return strings.ToLower(results[i].dev.Name) < strings.ToLower(results[j].dev.Name)
@@ -278,7 +299,11 @@ func pickBestDevice(devices []*portaudio.DeviceInfo) *portaudio.DeviceInfo {
 		return results[i].score > results[j].score
 	})
 
-	return results[0].dev
+	ranked := make([]*portaudio.DeviceInfo, 0, len(results))
+	for _, r := range results {
+		ranked = append(ranked, r.dev)
+	}
+	return ranked
 }
 
 // errorsIsInvalidStreamState checks if the provided error stems from stopping an already stopped stream.
@@ -293,4 +318,72 @@ func errorsIsInvalidStreamState(err error) bool {
 // AutoDetectDevice returns the best available input device PortAudio can find.
 func AutoDetectDevice() (*portaudio.DeviceInfo, error) {
 	return findDevice("")
+}
+
+func selectActiveDevice(candidates []*portaudio.DeviceInfo) *portaudio.DeviceInfo {
+	probes := 0
+	for _, dev := range candidates {
+		if dev == nil || dev.MaxInputChannels <= 0 {
+			continue
+		}
+		active, err := probeDeviceActivity(dev)
+		if err != nil {
+			continue
+		}
+		if active {
+			return dev
+		}
+		probes++
+		if probes >= maxActivityProbeDevices {
+			break
+		}
+	}
+	return nil
+}
+
+func probeDeviceActivity(dev *portaudio.DeviceInfo) (bool, error) {
+	sampleRate := dev.DefaultSampleRate
+	if sampleRate <= 0 {
+		sampleRate = 44100
+	}
+
+	var hasSignal atomic.Bool
+	callback := func(in []float32) {
+		if hasSignal.Load() {
+			return
+		}
+		for _, sample := range in {
+			if math.Abs(float64(sample)) >= activitySilenceThresh {
+				hasSignal.Store(true)
+				return
+			}
+		}
+	}
+
+	stream, err := portaudio.OpenStream(portaudio.StreamParameters{
+		Input: portaudio.StreamDeviceParameters{
+			Device:   dev,
+			Channels: 1,
+			Latency:  dev.DefaultLowInputLatency,
+		},
+		Output:          portaudio.StreamDeviceParameters{},
+		SampleRate:      sampleRate,
+		FramesPerBuffer: 256,
+	}, callback)
+	if err != nil {
+		return false, err
+	}
+	defer stream.Close()
+
+	if err := stream.Start(); err != nil {
+		return false, err
+	}
+
+	time.Sleep(activityProbeDuration)
+
+	if err := stream.Stop(); err != nil && !errorsIsInvalidStreamState(err) {
+		return false, err
+	}
+
+	return hasSignal.Load(), nil
 }
