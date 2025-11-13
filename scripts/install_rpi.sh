@@ -81,6 +81,8 @@ echo "==> Building golizer binary"
 go build -o golizer ./cmd/visualizer
 popd >/dev/null
 
+mv golizer /usr/local/bin/golizer
+
 echo ""
 echo "golizer is ready!"
 echo "Binary: ${REPO_ROOT}/golizer"
