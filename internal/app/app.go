@@ -32,6 +32,7 @@ type Config struct {
 	ColorMode     string
 	ColorOnAudio  bool
 	UseANSI       bool
+	Quality       string
 	Log           *log.Logger
 }
 
@@ -72,6 +73,9 @@ func New(cfg Config) (*App, error) {
 	if cfg.Log == nil {
 		cfg.Log = log.New(os.Stdout, "", log.LstdFlags)
 	}
+if cfg.Quality == "" {
+	cfg.Quality = "high"
+}
 
 	if cfg.Width <= 0 {
 		cfg.Width = 80
@@ -84,7 +88,7 @@ func New(cfg Config) (*App, error) {
 		renderHeight--
 	}
 
-	renderer, err := render.New(cfg.Width, renderHeight, cfg.Palette, cfg.Pattern, cfg.ColorMode, cfg.ColorOnAudio, cfg.UseANSI)
+	renderer, err := render.New(cfg.Width, renderHeight, cfg.Palette, cfg.Pattern, cfg.ColorMode, cfg.Quality, cfg.ColorOnAudio, cfg.UseANSI)
 	if err != nil {
 		return nil, err
 	}

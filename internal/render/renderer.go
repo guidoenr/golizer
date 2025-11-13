@@ -13,12 +13,17 @@ import (
 )
 
 type colorMode string
+type qualityMode string
 
 const (
 	colorModeChromatic colorMode = "chromatic"
 	colorModeFire      colorMode = "fire"
 	colorModeAurora    colorMode = "aurora"
 	colorModeMono      colorMode = "mono"
+
+	qualityHigh     qualityMode = "high"
+	qualityBalanced qualityMode = "balanced"
+	qualityEco      qualityMode = "eco"
 )
 
 var colorModeNames = []string{
@@ -28,10 +33,24 @@ var colorModeNames = []string{
 	string(colorModeMono),
 }
 
+var qualityModeNames = []string{
+	string(qualityHigh),
+	string(qualityBalanced),
+	string(qualityEco),
+}
+
 // ColorModeNames returns the supported color modes.
 func ColorModeNames() []string {
 	out := make([]string, len(colorModeNames))
 	copy(out, colorModeNames)
+	sort.Strings(out)
+	return out
+}
+
+// QualityModeNames returns the supported quality modes.
+func QualityModeNames() []string {
+	out := make([]string, len(qualityModeNames))
+	copy(out, qualityModeNames)
 	sort.Strings(out)
 	return out
 }
@@ -49,6 +68,19 @@ func parseColorMode(name string) colorMode {
 	}
 }
 
+func parseQualityMode(name string) qualityMode {
+	switch strings.ToLower(name) {
+	case "eco", "low", "pi":
+		return qualityEco
+	case "balanced", "medium", "mid":
+		return qualityBalanced
+	case "high", "full", "max":
+		return qualityHigh
+	default:
+		return qualityBalanced
+	}
+}
+
 // Renderer converts parameter state into ASCII frames.
 type Renderer struct {
 	width        int
@@ -59,6 +91,7 @@ type Renderer struct {
 	patternName  string
 	detailMix    float64
 	colorMode    colorMode
+	quality      qualityMode
 	colorOnAudio bool
 	useANSI      bool
 }
@@ -70,7 +103,7 @@ type Frame struct {
 }
 
 // New creates a Renderer.
-func New(width, height int, paletteName, patternName, colorModeName string, colorOnAudio bool, useANSI bool) (*Renderer, error) {
+func New(width, height int, paletteName, patternName, colorModeName, qualityName string, colorOnAudio bool, useANSI bool) (*Renderer, error) {
 	if width <= 0 || height <= 0 {
 		return nil, fmt.Errorf("invalid dimensions: width=%d height=%d", width, height)
 	}
@@ -80,6 +113,7 @@ func New(width, height int, paletteName, patternName, colorModeName string, colo
 		height:  height,
 		useANSI: useANSI,
 	}
+	r.SetQuality(qualityName)
 	r.Configure(paletteName, patternName, colorModeName, colorOnAudio)
 
 	return r, nil
@@ -127,6 +161,17 @@ func (r *Renderer) PatternName() string { return r.patternName }
 func (r *Renderer) ColorModeName() string {
 	return string(r.colorMode)
 }
+func (r *Renderer) QualityName() string {
+	return string(r.quality)
+}
+
+// SetQuality updates renderer quality preset.
+func (r *Renderer) SetQuality(name string) {
+	if name == "" {
+		name = string(qualityBalanced)
+	}
+	r.quality = parseQualityMode(name)
+}
 
 // Render generates a frame based on parameters and features.
 func (r *Renderer) Render(p params.Parameters, feat analyzer.Features, fps float64) Frame {
@@ -142,6 +187,8 @@ func (r *Renderer) Render(p params.Parameters, feat analyzer.Features, fps float
 	if scale <= 0 {
 		scale = 1
 	}
+
+	frameCtx := r.buildFrameParams(p, timeFactor)
 
 	width := r.width
 	height := r.height
@@ -170,7 +217,7 @@ func (r *Renderer) Render(p params.Parameters, feat analyzer.Features, fps float
 				vy := (float64(y)*invHeight - 0.5) * scale
 				for x := 0; x < width; x++ {
 					vx := (float64(x)*invWidth - 0.5) * scale
-					char, fg := r.samplePixel(vx, vy, p, timeFactor, feat, activation)
+					char, fg := r.samplePixel(vx, vy, p, frameCtx, feat, activation)
 					if useANSI {
 						builder.WriteString(colorCode(fg))
 					}
@@ -191,10 +238,11 @@ func (r *Renderer) Render(p params.Parameters, feat analyzer.Features, fps float
 	wg.Wait()
 
 	status := fmt.Sprintf(
-		"%s | palette=%s pattern=%s%s | bass %.2f mid %.2f treble %.2f beat %.2f fps %.1f",
+		"%s | palette=%s pattern=%s quality=%s%s | bass %.2f mid %.2f treble %.2f beat %.2f fps %.1f",
 		strings.ToUpper(string(r.colorMode)),
 		r.paletteName,
 		r.patternName,
+		r.QualityName(),
 		func() string {
 			if r.colorOnAudio {
 				return " col=AUDIO"
@@ -214,69 +262,81 @@ func (r *Renderer) Render(p params.Parameters, feat analyzer.Features, fps float
 	}
 }
 
-func (r *Renderer) samplePixel(vx, vy float64, p params.Parameters, t float64, feat analyzer.Features, activation float64) (rune, int) {
-	baseX := vx
-	baseY := vy
+func (r *Renderer) samplePixel(vx, vy float64, p params.Parameters, ctx frameParams, feat analyzer.Features, activation float64) (rune, int) {
+	baseX := vx * ctx.zoom
+	baseY := vy * ctx.zoom
 
-	// Beat-driven zoom and subtle rotation
-	zoom := 1.0 + p.BeatZoom*0.35*math.Sin(t*2.1)
-	baseX *= zoom
-	baseY *= zoom
+	rotX := baseX*ctx.cosRot - baseY*ctx.sinRot
+	rotY := baseX*ctx.sinRot + baseY*ctx.cosRot
 
-	sinRot, cosRot := math.Sincos(t * 0.2)
-	rotX := baseX*cosRot - baseY*sinRot
-	rotY := baseX*sinRot + baseY*cosRot
-
-	// Swirl distortion
 	radius := math.Hypot(rotX, rotY)
-	swirling := p.DistortAmplitude * (0.5 + p.BeatDistortion*0.5)
-	angle := math.Atan2(rotY, rotX) + swirling*math.Exp(-radius*1.8)*math.Sin(t*1.7+radius*3.2)
-	radial := radius + swirling*0.15*math.Sin(t*1.3+angle*1.5)
+	angle := math.Atan2(rotY, rotX)
+	if ctx.swirlStrength != 0 {
+		strength := ctx.swirlStrength
+		switch ctx.quality {
+		case qualityEco:
+			strength *= 0.55
+		case qualityBalanced:
+			strength *= 0.85
+		}
+		atten := math.Exp(-radius * 1.6)
+		angle += strength * atten * math.Sin(ctx.time*1.5+radius*2.3)
+		radius += strength * 0.12 * math.Sin(ctx.time*1.15+angle*1.4)
+	}
 
-	distortedX := radial * math.Cos(angle)
-	distortedY := radial * math.Sin(angle)
+	distortedX := radius * math.Cos(angle)
+	distortedY := radius * math.Sin(angle)
 
-	// Noise warp
-	noiseScale := math.Max(0.001, p.NoiseScale*40.0)
-	warp := fractalNoise((vx+p.Time*0.15)/noiseScale, (vy-p.Time*0.12)/noiseScale)
-	distortedX += warp * p.NoiseStrength * 0.35
-	distortedY += warp * p.NoiseStrength * 0.35
+	if ctx.warpStrength > 0 {
+		warp := fractalNoise((vx+ctx.time*0.15)/ctx.noiseScale, (vy-ctx.time*0.12)/ctx.noiseScale)
+		strength := ctx.warpStrength
+		switch ctx.quality {
+		case qualityEco:
+			strength *= 0.35
+		case qualityBalanced:
+			strength *= 0.7
+		}
+		distortedX += warp * strength
+		distortedY += warp * strength
+	}
 
-	// Base pattern + detail
-	patternValue := r.pattern(distortedX, distortedY, p, t)
-	detailWeight := clampFloat(r.detailMix*p.NoiseStrength, 0.0, 1.0)
+	patternValue := r.pattern(distortedX, distortedY, p, ctx.time)
 	combined := patternValue
-	if detailWeight > 0 {
-		detail := fractalNoise(distortedX*2+t*0.4, distortedY*2-t*0.3)
-		combined = patternValue*(1-detailWeight) + detail*detailWeight
+	if ctx.detailWeight > 0 {
+		detail := fractalNoise(distortedX*2+ctx.time*0.4, distortedY*2-ctx.time*0.3)
+		combined = patternValue*(1-ctx.detailWeight) + detail*ctx.detailWeight
 	}
 	combined = clampFloat(combined, -1.0, 1.0)
 
-	amp := clampFloat(p.Amplitude, 0.0, 3.0)
-	brightness := (combined*amp + 1.0) * 0.5
+	brightness := (combined*ctx.amplitude + 1.0) * 0.5
 	brightness = clamp01(brightness)
-	brightness = math.Pow(brightness, 1.0/math.Max(0.1, p.Gamma))
-	brightness = math.Pow(brightness, 1.0/math.Max(0.2, p.Contrast))
-	brightness = clamp01(brightness * p.Brightness)
+	switch ctx.quality {
+	case qualityEco:
+		brightness = brightness * (0.7 + brightness*0.3)
+	default:
+		brightness = math.Pow(brightness, ctx.invGamma)
+		brightness = math.Pow(brightness, ctx.invContrast)
+	}
+	brightness = clamp01(brightness * ctx.brightnessScale)
 
-	// Damp brightness when idle (audio reactive mode)
 	if r.colorOnAudio {
 		brightness = clamp01(lerp(0.04, brightness, activation))
 	}
 
-	// Apply vignette
-	if p.Vignette > 0 {
+	if ctx.vignette > 0 {
 		dist := math.Min(1.0, math.Hypot(vx, vy)*2.0)
-		vig := clamp01(1.0 - p.Vignette*math.Pow(dist, 1.2))
-		softness := clamp01(p.VignetteSoftness)
-		brightness *= lerp(1.0, vig, 1.0-softness)
+		vig := clamp01(1.0 - ctx.vignette*math.Pow(dist, 1.2))
+		brightness *= lerp(1.0, vig, 1.0-ctx.vignetteSoft)
 	}
 
 	brightness = clamp01(brightness)
 
-	// Glyph selection
-	sharpness := math.Max(0.2, p.GlyphSharpness)
-	glyphValue := math.Pow(brightness, sharpness)
+	var glyphValue float64
+	if ctx.quality == qualityEco {
+		glyphValue = brightness
+	} else {
+		glyphValue = math.Pow(brightness, ctx.glyphSharpness)
+	}
 	index := clampInt(int(glyphValue*float64(len(r.palette)-1)+0.5), 0, len(r.palette)-1)
 
 	colorIndex := 15
@@ -286,6 +346,69 @@ func (r *Renderer) samplePixel(vx, vy float64, p params.Parameters, t float64, f
 	}
 
 	return r.palette[index], colorIndex
+}
+
+type frameParams struct {
+	time            float64
+	zoom            float64
+	sinRot          float64
+	cosRot          float64
+	noiseScale      float64
+	warpStrength    float64
+	detailWeight    float64
+	amplitude       float64
+	invGamma        float64
+	invContrast     float64
+	brightnessScale float64
+	vignette        float64
+	vignetteSoft    float64
+	glyphSharpness  float64
+	swirlStrength   float64
+	quality         qualityMode
+}
+
+func (r *Renderer) buildFrameParams(p params.Parameters, time float64) frameParams {
+	zoom := 1.0 + p.BeatZoom*0.35*math.Sin(time*2.1)
+	sinRot, cosRot := math.Sincos(time * 0.2)
+	noiseScale := math.Max(0.001, p.NoiseScale*40.0)
+	warpStrength := p.NoiseStrength * 0.35
+	detailWeight := clampFloat(r.detailMix*p.NoiseStrength, 0.0, 1.0)
+	amplitude := clampFloat(p.Amplitude, 0.0, 3.0)
+	invGamma := 1.0 / math.Max(0.1, p.Gamma)
+	invContrast := 1.0 / math.Max(0.2, p.Contrast)
+	vignetteSoft := clamp01(p.VignetteSoftness)
+	swirlStrength := p.DistortAmplitude * (0.5 + p.BeatDistortion*0.5)
+
+	switch r.quality {
+	case qualityEco:
+		zoom = lerp(1.0, zoom, 0.6)
+		detailWeight *= 0.35
+		warpStrength *= 0.6
+		swirlStrength *= 0.7
+	case qualityBalanced:
+		detailWeight *= 0.75
+		warpStrength *= 0.85
+		swirlStrength *= 0.9
+	}
+
+	return frameParams{
+		time:            time,
+		zoom:            zoom,
+		sinRot:          sinRot,
+		cosRot:          cosRot,
+		noiseScale:      noiseScale,
+		warpStrength:    warpStrength,
+		detailWeight:    detailWeight,
+		amplitude:       amplitude,
+		invGamma:        invGamma,
+		invContrast:     invContrast,
+		brightnessScale: clampFloat(p.Brightness, 0.0, 3.0),
+		vignette:        clampFloat(p.Vignette, 0.0, 1.0),
+		vignetteSoft:    vignetteSoft,
+		glyphSharpness:  math.Max(0.2, p.GlyphSharpness),
+		swirlStrength:   swirlStrength,
+		quality:         r.quality,
+	}
 }
 
 func (r *Renderer) colorFromMode(base, brightness float64, p params.Parameters, feat analyzer.Features, activation float64) (float64, float64, float64) {
