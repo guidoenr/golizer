@@ -33,6 +33,8 @@ type Config struct {
 	ColorOnAudio  bool
 	UseANSI       bool
 	Quality       string
+	AutoRandomize bool
+	RandomInterval time.Duration
 	Log           *log.Logger
 }
 
@@ -63,6 +65,9 @@ type App struct {
 	paletteOptions []string
 	patternOptions []string
 	colorOptions   []string
+	autoRandomize  bool
+	randomInterval time.Duration
+	lastRandom     time.Time
 }
 
 // New constructs the application using the provided configuration.
@@ -73,9 +78,12 @@ func New(cfg Config) (*App, error) {
 	if cfg.Log == nil {
 		cfg.Log = log.New(os.Stdout, "", log.LstdFlags)
 	}
-if cfg.Quality == "" {
-	cfg.Quality = "high"
-}
+	if cfg.Quality == "" {
+		cfg.Quality = "high"
+	}
+	if cfg.RandomInterval <= 0 {
+		cfg.RandomInterval = 10 * time.Second
+	}
 
 	if cfg.Width <= 0 {
 		cfg.Width = 80
@@ -102,6 +110,8 @@ if cfg.Quality == "" {
 		height:         cfg.Height,
 		renderHeight:   renderHeight,
 		colorOnAudio:   cfg.ColorOnAudio,
+		autoRandomize:  cfg.AutoRandomize,
+		randomInterval: cfg.RandomInterval,
 		rng:            rand.New(rand.NewSource(time.Now().UnixNano())),
 		paletteOptions: render.PaletteNames(),
 		patternOptions: render.PatternNames(),
@@ -159,6 +169,16 @@ func (a *App) Run(ctx context.Context) error {
 	ticker := time.NewTicker(frameDuration)
 	defer ticker.Stop()
 
+	var (
+		randomTicker *time.Ticker
+		randomCh     <-chan time.Time
+	)
+	if a.autoRandomize {
+		randomTicker = time.NewTicker(a.randomInterval)
+		randomCh = randomTicker.C
+		defer randomTicker.Stop()
+	}
+
 	enterAltScreen()
 	clearScreen()
 	hideCursor()
@@ -189,6 +209,8 @@ func (a *App) Run(ctx context.Context) error {
 				moveCursorHome()
 				return nil
 			}
+		case <-randomCh:
+			a.randomizeVisuals()
 		case <-ticker.C:
 			if err := a.step(); err != nil {
 				return err

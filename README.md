@@ -13,6 +13,7 @@ It keeps the same DSP ideas (PortAudio capture + FFT-based analyzer + beat detec
 - Full-screen alternate-buffer rendering that restores the terminal state on exit.
 - CLI flags for resolution, FPS, palette, audio device, buffer size, synthetic audio mode, and audio-triggered colour bursts.
 - Automatic PortAudio device discovery with `--list-audio-devices`, smart default scoring, and a quick audio-activity probe to latch onto the device that’s actually producing signal.
+- Quality presets via `--quality` (`auto`, `high`, `balanced`, `eco`) that pick lighter palettes/patterns and softer math paths for Raspberry Pi and other low-power CPUs.
 - Live visual randomiser (`R`) and keyboard quit (`Q` / `Esc`) bindings.
 - One-shot bootstrap script (`scripts/install_rpi.sh`) for Debian 12 / Raspberry Pi 4 environments that installs Go, PortAudio headers, and builds the binary.
 
@@ -31,10 +32,11 @@ It keeps the same DSP ideas (PortAudio capture + FFT-based analyzer + beat detec
    ```bash
    go build -o golizer ./cmd/visualizer
    ```
-1. **Run with real audio** (auto sizes to the terminal and defaults to 500 FPS):
+1. **Run with real audio** (auto sizes to the terminal and tunes presets with `--quality`):
    ```bash
-   ./golizer --fps 10000
+   ./golizer --quality auto
    ```
+   On Raspberry Pi 4 the auto preset switches to the lightweight palette/pattern combo (`minimal` + `bands`) and caps the target FPS to ~70 for smooth playback without cooking the CPU. Override with `--quality balanced` or `--quality high` if you have more headroom.
 1. **List audio devices** (from a tiny helper snippet):
    ```bash
    go run ./cmd/visualizer --list-audio-devices
@@ -50,6 +52,16 @@ It keeps the same DSP ideas (PortAudio capture + FFT-based analyzer + beat detec
    ./golizer --color-on-audio
    ```
    Colour-on-audio is on by default; add `--color-on-audio=false` if you want constant colour.
+
+### Raspberry Pi quickstart
+
+After running `./scripts/install_rpi.sh`, try:
+
+```bash
+golizer --quality auto --status=false --palette auto --pattern auto --fps 72 --color-on-audio
+```
+
+This keeps ANSI colour enabled (disable with `--no-color` if you need every last frame), leans on the eco renderer path, and hides the status bar to save a few extra rows.
 
 ## Runtime Controls
 

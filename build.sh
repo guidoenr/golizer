@@ -2,6 +2,6 @@
 
 go build -o golizer ./cmd/visualizer
 
-mv golizer /usr/local/bin/golizer
+sudo mv golizer /usr/local/bin/golizer
 
 

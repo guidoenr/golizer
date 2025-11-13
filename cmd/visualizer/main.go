@@ -7,6 +7,8 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
@@ -25,12 +27,13 @@ func main() {
 		noAudio    = flag.Bool("no-audio", false, "Run with synthetic audio (for testing)")
 		debug      = flag.Bool("debug", false, "Enable verbose logging")
 		showStatus = flag.Bool("status", true, "Display status bar")
-		palette    = flag.String("palette", "default", "ASCII palette (default|box|lines|spark|retro|minimal|block|bubble)")
-		pattern    = flag.String("pattern", "plasma", "Visual pattern (plasma|waves|ripples|nebula|noise|bands|strata|orbits)")
+		palette    = flag.String("palette", "auto", "ASCII palette (auto|default|box|lines|spark|retro|minimal|block|bubble)")
+		pattern    = flag.String("pattern", "auto", "Visual pattern (auto|plasma|waves|ripples|nebula|noise|bands|strata|orbits)")
 		colorMode  = flag.String("color-mode", "chromatic", "Color mode (chromatic|fire|aurora|mono)")
 		listDevs   = flag.Bool("list-audio-devices", false, "List available audio input devices and exit")
 		colorBurst = flag.Bool("color-on-audio", true, "Fade from monochrome to color based on audio energy")
 		noColor    = flag.Bool("no-color", false, "Disable ANSI color output")
+		quality    = flag.String("quality", "auto", "Quality preset (auto|high|balanced|eco)")
 	)
 
 	flag.Parse()
@@ -98,19 +101,47 @@ func main() {
 		return
 	}
 
+	qualityName, err := resolveQualityPreset(*quality)
+	if err != nil {
+		logger.Fatalf("quality: %v", err)
+	}
+	if strings.EqualFold(*quality, "auto") {
+		logger.Printf("quality auto -> %s (arch=%s cores=%d)", qualityName, runtime.GOARCH, runtime.NumCPU())
+	}
+
+	paletteName := resolvePaletteName(*palette, qualityName)
+	patternName := resolvePatternName(*pattern, qualityName)
+	colorModeName := strings.ToLower(strings.TrimSpace(*colorMode))
+	if colorModeName == "" {
+		colorModeName = "chromatic"
+	}
+
+	targetFPSValue := *targetFPS
+	if !flagIsPassed("fps") {
+		targetFPSValue = defaultFPSForQuality(qualityName)
+	}
+
+	if strings.EqualFold(*palette, "auto") || strings.TrimSpace(*palette) == "" {
+		logger.Printf("palette auto -> %s", paletteName)
+	}
+	if strings.EqualFold(*pattern, "auto") || strings.TrimSpace(*pattern) == "" {
+		logger.Printf("pattern auto -> %s", patternName)
+	}
+
 	appConfig := app.Config{
 		DeviceName:    *deviceName,
 		Width:         *width,
 		Height:        *height,
-		TargetFPS:     *targetFPS,
+		TargetFPS:     targetFPSValue,
 		BufferSize:    *bufferSize,
 		DisableAudio:  *noAudio,
 		ShowStatusBar: *showStatus,
-		Palette:       *palette,
-		Pattern:       *pattern,
-		ColorMode:     *colorMode,
+		Palette:       paletteName,
+		Pattern:       patternName,
+		ColorMode:     colorModeName,
 		ColorOnAudio:  *colorBurst,
 		UseANSI:       !*noColor,
+		Quality:       qualityName,
 		Log:           logger,
 	}
 
@@ -133,4 +164,87 @@ func main() {
 	}
 
 	time.Sleep(50 * time.Millisecond)
+}
+
+func resolveQualityPreset(input string) (string, error) {
+	value := strings.ToLower(strings.TrimSpace(input))
+	if value == "" || value == "auto" {
+		if env := strings.TrimSpace(os.Getenv("GOLIZER_QUALITY")); env != "" {
+			value = strings.ToLower(env)
+		}
+	}
+	switch value {
+	case "", "auto":
+		return autoQualityPreset(), nil
+	case "high", "balanced", "eco":
+		return value, nil
+	default:
+		return "", fmt.Errorf("unknown quality preset %q", input)
+	}
+}
+
+func autoQualityPreset() string {
+	arch := runtime.GOARCH
+	cores := runtime.NumCPU()
+	if arch == "arm64" || arch == "arm" {
+		if cores <= 4 {
+			return "eco"
+		}
+		return "balanced"
+	}
+	if cores <= 4 {
+		return "balanced"
+	}
+	return "high"
+}
+
+func resolvePaletteName(requested string, quality string) string {
+	name := strings.ToLower(strings.TrimSpace(requested))
+	if name == "" || name == "auto" {
+		switch quality {
+		case "eco":
+			return "minimal"
+		case "balanced":
+			return "retro"
+		default:
+			return "default"
+		}
+	}
+	return name
+}
+
+func resolvePatternName(requested string, quality string) string {
+	name := strings.ToLower(strings.TrimSpace(requested))
+	if name == "" || name == "auto" {
+		switch quality {
+		case "eco":
+			return "bands"
+		case "balanced":
+			return "waves"
+		default:
+			return "plasma"
+		}
+	}
+	return name
+}
+
+func defaultFPSForQuality(quality string) float64 {
+	switch quality {
+	case "eco":
+		return 72
+	case "balanced":
+		return 180
+	default:
+		return 1000
+	}
+}
+
+func flagIsPassed(name string) bool {
+	found := false
+	flag.CommandLine.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			found = true
+		}
+	})
+	return found
 }
