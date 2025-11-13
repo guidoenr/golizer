@@ -1,4 +1,4 @@
-# Chroma CPU Audio Visualizer (Go)
+# GOLIZER
 
 This directory contains a CPU-only re-implementation of Chroma’s audio reactive pipeline using Go.  
 It keeps the same DSP ideas (PortAudio capture + FFT-based analyzer + beat detection) but renders ASCII frames on the CPU instead of dispatching WGSL shaders.
