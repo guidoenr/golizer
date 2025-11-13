@@ -1,4 +1,4 @@
-module github.com/guidoenr/chroma/go-implementation
+module github.com/guidoenr/golizer
 
 go 1.24.0
 

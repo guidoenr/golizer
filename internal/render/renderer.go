@@ -3,11 +3,13 @@ package render
 import (
 	"fmt"
 	"math"
+	"runtime"
 	"sort"
 	"strings"
+	"sync"
 
-	"github.com/guidoenr/chroma/go-implementation/internal/analyzer"
-	"github.com/guidoenr/chroma/go-implementation/internal/params"
+	"github.com/guidoenr/golizer/internal/analyzer"
+	"github.com/guidoenr/golizer/internal/params"
 )
 
 type colorMode string
@@ -55,6 +57,7 @@ type Renderer struct {
 	paletteName  string
 	pattern      patternFunc
 	patternName  string
+	detailMix    float64
 	colorMode    colorMode
 	colorOnAudio bool
 	useANSI      bool
@@ -94,12 +97,15 @@ func (r *Renderer) Configure(paletteName, patternName, colorModeName string, col
 	if key == "" {
 		key = "plasma"
 	}
-	if pattern, ok := patternRegistry[key]; ok {
-		r.pattern = pattern
+	if entry, ok := patternRegistry[key]; ok {
+		r.pattern = entry.fn
 		r.patternName = key
+		r.detailMix = entry.detailMix
 	} else {
-		r.pattern = patternRegistry["plasma"]
+		def := patternRegistry["plasma"]
+		r.pattern = def.fn
 		r.patternName = "plasma"
+		r.detailMix = def.detailMix
 	}
 
 	r.colorMode = parseColorMode(colorModeName)
@@ -137,23 +143,52 @@ func (r *Renderer) Render(p params.Parameters, feat analyzer.Features, fps float
 		scale = 1
 	}
 
-	for y := 0; y < r.height; y++ {
-		var builder strings.Builder
-		builder.Grow(r.width * 8)
-		vy := (float64(y)/float64(r.height) - 0.5) * scale
-		for x := 0; x < r.width; x++ {
-			vx := (float64(x)/float64(r.width) - 0.5) * scale
-			char, fg := r.samplePixel(vx, vy, p, timeFactor, feat, activation)
-			if r.useANSI {
-				builder.WriteString(colorCode(fg))
-			}
-			builder.WriteRune(char)
-		}
-		if r.useANSI {
-			builder.WriteString("\x1b[0m")
-		}
-		lines[y] = builder.String()
+	width := r.width
+	height := r.height
+	invWidth := 1.0 / float64(width)
+	invHeight := 1.0 / float64(height)
+	useANSI := r.useANSI
+
+	numWorkers := runtime.GOMAXPROCS(0)
+	if numWorkers > height {
+		numWorkers = height
 	}
+	if numWorkers < 1 {
+		numWorkers = 1
+	}
+
+	var wg sync.WaitGroup
+	rowJobs := make(chan int, numWorkers)
+
+	for w := 0; w < numWorkers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for y := range rowJobs {
+				var builder strings.Builder
+				builder.Grow(width * 8)
+				vy := (float64(y)*invHeight - 0.5) * scale
+				for x := 0; x < width; x++ {
+					vx := (float64(x)*invWidth - 0.5) * scale
+					char, fg := r.samplePixel(vx, vy, p, timeFactor, feat, activation)
+					if useANSI {
+						builder.WriteString(colorCode(fg))
+					}
+					builder.WriteRune(char)
+				}
+				if useANSI {
+					builder.WriteString("\x1b[0m")
+				}
+				lines[y] = builder.String()
+			}
+		}()
+	}
+
+	for y := 0; y < height; y++ {
+		rowJobs <- y
+	}
+	close(rowJobs)
+	wg.Wait()
 
 	status := fmt.Sprintf(
 		"%s | palette=%s pattern=%s%s | bass %.2f mid %.2f treble %.2f beat %.2f fps %.1f",
@@ -209,8 +244,12 @@ func (r *Renderer) samplePixel(vx, vy float64, p params.Parameters, t float64, f
 
 	// Base pattern + detail
 	patternValue := r.pattern(distortedX, distortedY, p, t)
-	detail := fractalNoise(distortedX*2+t*0.4, distortedY*2-t*0.3)
-	combined := patternValue*(1-p.NoiseStrength*0.4) + detail*(p.NoiseStrength*0.4)
+	detailWeight := clampFloat(r.detailMix*p.NoiseStrength, 0.0, 1.0)
+	combined := patternValue
+	if detailWeight > 0 {
+		detail := fractalNoise(distortedX*2+t*0.4, distortedY*2-t*0.3)
+		combined = patternValue*(1-detailWeight) + detail*detailWeight
+	}
 	combined = clampFloat(combined, -1.0, 1.0)
 
 	amp := clampFloat(p.Amplitude, 0.0, 3.0)

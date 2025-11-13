@@ -1,22 +1,29 @@
 # GOLIZER
 
-This directory contains a CPU-only re-implementation of Chroma’s audio reactive pipeline using Go.  
+this directory is literally a copy of [Chroma](https://github.com/yuri-xyz/chroma), but **CPU-based**, but... why? everything surged when i tried to run the chroma gpu-based version on my setup and i faced this [issue](https://github.com/yuri-xyz/chroma/issues/14), so this repo contains a CPU-only re-implementation of Chroma’s audio reactive pipeline using Go.  
 It keeps the same DSP ideas (PortAudio capture + FFT-based analyzer + beat detection) but renders ASCII frames on the CPU instead of dispatching WGSL shaders.
 
 ## Features
 
 - PortAudio capture with device selection and mono conversion.
 - FFT analyzer mirroring the Rust logic: Hann window, bass/mid/treble energy, beat pulse, and bass-drop detection.
-- ASCII renderer with ANSI color output and palettes (`default`, `box`, `lines`, `spark`) plus color modes (`chromatic`, `fire`, `aurora`, `mono`). When `--color-on-audio` is enabled the scene stays dark/monochrome until energy is detected.
-- Multiple CPU patterns (`plasma`, `waves`, `ripples`, `nebula`, `noise`) that roughly mirror the GPU shader presets.
+- ASCII renderer with ANSI color output and palettes (`default`, `box`, `lines`, `spark`, `retro`, `minimal`, `block`, `bubble`) plus color modes (`chromatic`, `fire`, `aurora`, `mono`). Audio-reactive colour is enabled by default; pass `--color-on-audio=false` to keep full colour at all times.
+- Multiple CPU patterns (`plasma`, `waves`, `ripples`, `nebula`, `noise`, `bands`, `strata`, `orbits`) ranging from shader-inspired looks to lightweight options for slower CPUs.
+- Parallel row renderer that fans out across CPU cores using goroutines for faster ASCII conversion.
 - Full-screen alternate-buffer rendering that restores the terminal state on exit.
 - CLI flags for resolution, FPS, palette, audio device, buffer size, synthetic audio mode, and audio-triggered colour bursts.
 - Automatic PortAudio device discovery with `--list-audio-devices` and smart default selection for “monitor/loopback” style inputs.
 - Live visual randomiser (`R`) and keyboard quit (`Q` / `Esc`) bindings.
+- One-shot bootstrap script (`scripts/install_rpi.sh`) for Debian 12 / Raspberry Pi 4 environments that installs Go, PortAudio headers, and builds the binary.
 
 ## Getting Started
 
-1. **Install PortAudio** (required for real audio capture):
+1. **Bootstrap on Debian/Raspberry Pi (optional)**:
+   ```bash
+   ./scripts/install_rpi.sh
+   ```
+   The script installs Go (if missing or outdated), PortAudio headers, and builds the project in-place.
+1. **Install PortAudio manually** (if you prefer doing it yourself):
    ```bash
    sudo apt install portaudio19-dev
    ```
@@ -24,9 +31,9 @@ It keeps the same DSP ideas (PortAudio capture + FFT-based analyzer + beat detec
    ```bash
    go build -o golizer ./cmd/visualizer
    ```
-1. **Run with real audio** (auto sizes to the terminal and defaults to 60 FPS):
+1. **Run with real audio** (auto sizes to the terminal and defaults to 500 FPS):
    ```bash
-   ./golizer --fps 60
+   ./golizer --fps 10000
    ```
 1. **List audio devices** (from a tiny helper snippet):
    ```bash
@@ -42,7 +49,7 @@ It keeps the same DSP ideas (PortAudio capture + FFT-based analyzer + beat detec
    ```bash
    ./golizer --color-on-audio
    ```
-   When the flag is enabled the scene stays monochrome until the analyser detects energy (great for “dark until I speak” setups).
+   Colour-on-audio is on by default; add `--color-on-audio=false` if you want constant colour.
 
 ## Runtime Controls
 
@@ -65,8 +72,8 @@ It keeps the same DSP ideas (PortAudio capture + FFT-based analyzer + beat detec
 
 ## Roadmap Ideas
 
-- Implement more palettes and CPU-friendly pattern generators.
 - Add JSON/TOML configuration loading plus live reload.
-- Explore Go routine parallelism (rayon equivalent) for faster ASCII conversion.
+- Experiment with emoji/Unicode glyph packs for ultra-high density renders.
+- Capture frame dumps for exporting GIF/MP4 clips.
 
 

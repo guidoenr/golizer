@@ -4,17 +4,25 @@ import (
 	"math"
 	"sort"
 
-	"github.com/guidoenr/chroma/go-implementation/internal/params"
+	"github.com/guidoenr/golizer/internal/params"
 )
 
 type patternFunc func(x, y float64, p params.Parameters, t float64) float64
 
-var patternRegistry = map[string]patternFunc{
-	"plasma":  patternPlasma,
-	"waves":   patternWaves,
-	"ripples": patternRipples,
-	"nebula":  patternNebula,
-	"noise":   patternNoise,
+type patternEntry struct {
+	fn        patternFunc
+	detailMix float64
+}
+
+var patternRegistry = map[string]patternEntry{
+	"plasma":  {patternPlasma, 0.4},
+	"waves":   {patternWaves, 0.4},
+	"ripples": {patternRipples, 0.4},
+	"nebula":  {patternNebula, 0.4},
+	"noise":   {patternNoise, 0.4},
+	"bands":   {patternBands, 0.0},
+	"strata":  {patternStrata, 0.1},
+	"orbits":  {patternOrbits, 0.15},
 }
 
 // PatternNames returns the available pattern identifiers.
@@ -56,6 +64,26 @@ func patternNebula(x, y float64, p params.Parameters, t float64) float64 {
 func patternNoise(x, y float64, p params.Parameters, t float64) float64 {
 	scale := math.Max(0.001, p.NoiseScale*60.0)
 	return fractalNoise((x+p.ColorShift)*scale+t*0.2, (y-p.ColorShift)*scale-t*0.18)
+}
+
+func patternBands(x, y float64, p params.Parameters, t float64) float64 {
+	freq := math.Max(0.2, p.Frequency*0.35)
+	wave := math.Sin((y + t*0.5) * freq)
+	mod := math.Sin((x*0.5+t*0.18)*freq*0.8) * 0.6
+	return (wave + mod) * 0.7
+}
+
+func patternStrata(x, y float64, p params.Parameters, t float64) float64 {
+	layer := math.Sin((y*1.5 + t*0.35) * math.Max(1.2, p.Frequency*0.25))
+	cross := math.Sin((x*1.1-t*0.22)*1.8) * 0.4
+	return layer*0.8 + cross
+}
+
+func patternOrbits(x, y float64, p params.Parameters, t float64) float64 {
+	r2 := x*x + y*y
+	ring := math.Sin(r2*6.0 + t*0.8)
+	sweep := math.Sin((x + y + t*0.5) * math.Max(1.0, p.Frequency*0.2))
+	return (ring*0.7 + sweep*0.3)
 }
 
 func fractalNoise(x, y float64) float64 {

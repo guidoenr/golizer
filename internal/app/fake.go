@@ -5,7 +5,7 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/guidoenr/chroma/go-implementation/internal/analyzer"
+	"github.com/guidoenr/golizer/internal/analyzer"
 )
 
 type fakeGenerator struct {

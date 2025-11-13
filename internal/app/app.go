@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/eiannone/keyboard"
-	"github.com/guidoenr/chroma/go-implementation/internal/analyzer"
-	"github.com/guidoenr/chroma/go-implementation/internal/audio"
-	"github.com/guidoenr/chroma/go-implementation/internal/params"
-	"github.com/guidoenr/chroma/go-implementation/internal/render"
+	"github.com/guidoenr/golizer/internal/analyzer"
+	"github.com/guidoenr/golizer/internal/audio"
+	"github.com/guidoenr/golizer/internal/params"
+	"github.com/guidoenr/golizer/internal/render"
 	"golang.org/x/term"
 )
 

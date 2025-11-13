@@ -3,7 +3,7 @@ package params
 import (
 	"math"
 
-	"github.com/guidoenr/chroma/go-implementation/internal/analyzer"
+	"github.com/guidoenr/golizer/internal/analyzer"
 )
 
 // Parameters models shader-friendly configuration adapted for CPU rendering.

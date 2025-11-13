@@ -3,7 +3,7 @@ package params
 import (
 	"testing"
 
-	"github.com/guidoenr/chroma/go-implementation/internal/analyzer"
+	"github.com/guidoenr/golizer/internal/analyzer"
 )
 
 func TestApplySilenceDecayDoesNotPanic(t *testing.T) {
