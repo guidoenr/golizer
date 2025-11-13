@@ -22,11 +22,11 @@ It keeps the same DSP ideas (PortAudio capture + FFT-based analyzer + beat detec
    ```
 1. **Build the native binary** (recommended for fastest startup):
    ```bash
-   go build -o chroma-go ./cmd/visualizer
+   go build -o golizer ./cmd/visualizer
    ```
 1. **Run with real audio** (auto sizes to the terminal and defaults to 60 FPS):
    ```bash
-   ./chroma-go --fps 60
+   ./golizer --fps 60
    ```
 1. **List audio devices** (from a tiny helper snippet):
    ```bash
@@ -40,7 +40,7 @@ It keeps the same DSP ideas (PortAudio capture + FFT-based analyzer + beat detec
    ```
 1. **Colour burst tied to audio**:
    ```bash
-   ./chroma-go --color-on-audio
+   ./golizer --color-on-audio
    ```
    When the flag is enabled the scene stays monochrome until the analyser detects energy (great for “dark until I speak” setups).
 
