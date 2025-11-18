@@ -4,6 +4,7 @@ package render
 
 import (
 	"fmt"
+	"unsafe"
 
 	"github.com/guidoenr/golizer/internal/analyzer"
 	"github.com/guidoenr/golizer/internal/params"
@@ -130,10 +131,14 @@ func (r *Renderer) renderSDL(p params.Parameters, feat analyzer.Features, fps fl
 		Status: status,
 		Present: func(status string) error {
 			if status != "" && status != state.windowTitle && state.window != nil {
-				_ = state.window.SetTitle(status)
+				state.window.SetTitle(status)
 				state.windowTitle = status
 			}
-			if err := state.texture.Update(nil, state.pixelBuffer, state.pitch); err != nil {
+			var pixels unsafe.Pointer
+			if len(state.pixelBuffer) > 0 {
+				pixels = unsafe.Pointer(&state.pixelBuffer[0])
+			}
+			if err := state.texture.Update(nil, pixels, state.pitch); err != nil {
 				return err
 			}
 			if err := state.renderer.Clear(); err != nil {
