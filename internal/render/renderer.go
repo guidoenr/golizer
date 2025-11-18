@@ -226,6 +226,17 @@ func (r *Renderer) Render(p params.Parameters, feat analyzer.Features, fps float
 	xCoords := r.xCoords
 	yCoords := r.yCoords
 
+	var (
+		noiseWarp   []float64
+		noiseDetail []float64
+	)
+	if frameCtx.warpStrength > 0 && frameCtx.noiseScale > 0 {
+		noiseWarp = r.precomputeWarpNoise(width, height, xCoords, yCoords, scale, frameCtx)
+	}
+	if frameCtx.detailWeight > 0 {
+		noiseDetail = r.precomputeDetailNoise(width, height, xCoords, yCoords, scale, frameCtx, noiseWarp)
+	}
+
 	numWorkers := runtime.GOMAXPROCS(0)
 	if numWorkers > height {
 		numWorkers = height
@@ -261,7 +272,8 @@ func (r *Renderer) Render(p params.Parameters, feat analyzer.Features, fps float
 					vy := yCoords[y] * scale
 					for x := 0; x < width; x++ {
 						vx := xCoords[x] * scale
-						char, fg := r.samplePixel(vx, vy, p, frameCtx, feat, activation)
+						index := y*width + x
+						char, fg := r.samplePixel(vx, vy, p, frameCtx, feat, activation, noiseWarp, noiseDetail, index)
 						if useANSI {
 							if fg != lastColor {
 								builder.WriteString(colorCode(fg))
@@ -297,7 +309,7 @@ func (r *Renderer) Render(p params.Parameters, feat analyzer.Features, fps float
 	}
 }
 
-func (r *Renderer) samplePixel(vx, vy float64, p params.Parameters, ctx frameParams, feat analyzer.Features, activation float64) (rune, int) {
+func (r *Renderer) samplePixel(vx, vy float64, p params.Parameters, ctx frameParams, feat analyzer.Features, activation float64, noiseWarp, noiseDetail []float64, idx int) (rune, int) {
 	baseX := vx * ctx.zoom
 	baseY := vy * ctx.zoom
 
@@ -323,7 +335,12 @@ func (r *Renderer) samplePixel(vx, vy float64, p params.Parameters, ctx framePar
 	distortedY := radius * math.Sin(angle)
 
 	if ctx.warpStrength > 0 {
-		warp := fractalNoise((vx+ctx.time*0.15)/ctx.noiseScale, (vy-ctx.time*0.12)/ctx.noiseScale)
+		warp := 0.0
+		if noiseWarp != nil && idx >= 0 && idx < len(noiseWarp) {
+			warp = noiseWarp[idx]
+		} else {
+			warp = fractalNoise((vx+ctx.time*0.15)/ctx.noiseScale, (vy-ctx.time*0.12)/ctx.noiseScale)
+		}
 		strength := ctx.warpStrength
 		switch ctx.quality {
 		case qualityEco:
@@ -338,7 +355,12 @@ func (r *Renderer) samplePixel(vx, vy float64, p params.Parameters, ctx framePar
 	patternValue := r.pattern(distortedX, distortedY, p, ctx.time)
 	combined := patternValue
 	if ctx.detailWeight > 0 {
-		detail := fractalNoise(distortedX*2+ctx.time*0.4, distortedY*2-ctx.time*0.3)
+		detail := 0.0
+		if noiseDetail != nil && idx >= 0 && idx < len(noiseDetail) {
+			detail = noiseDetail[idx]
+		} else {
+			detail = fractalNoise(distortedX*2+ctx.time*0.4, distortedY*2-ctx.time*0.3)
+		}
 		combined = patternValue*(1-ctx.detailWeight) + detail*ctx.detailWeight
 	}
 	combined = clampFloat(combined, -1.0, 1.0)
@@ -650,6 +672,79 @@ func (r *Renderer) buildStatus(feat analyzer.Features, fps float64) string {
 	builder.WriteString(" fps ")
 	appendFloat(builder, fps, 1)
 	return builder.String()
+}
+
+func (r *Renderer) precomputeWarpNoise(width, height int, xCoords, yCoords []float64, scale float64, ctx frameParams) []float64 {
+	total := width * height
+	results := make([]float64, total)
+	if ctx.noiseScale <= 0 {
+		return results
+	}
+	for y := 0; y < height; y++ {
+		vy := yCoords[y] * scale
+		for x := 0; x < width; x++ {
+			index := y*width + x
+			vx := xCoords[x] * scale
+			results[index] = fractalNoise((vx+ctx.time*0.15)/ctx.noiseScale, (vy-ctx.time*0.12)/ctx.noiseScale)
+		}
+	}
+	return results
+}
+
+func (r *Renderer) precomputeDetailNoise(width, height int, xCoords, yCoords []float64, scale float64, ctx frameParams, warp []float64) []float64 {
+	total := width * height
+	results := make([]float64, total)
+	for y := 0; y < height; y++ {
+		vy := yCoords[y] * scale
+		for x := 0; x < width; x++ {
+			index := y*width + x
+			vx := xCoords[x] * scale
+
+			baseX := vx * ctx.zoom
+			baseY := vy * ctx.zoom
+			rotX := baseX*ctx.cosRot - baseY*ctx.sinRot
+			rotY := baseX*ctx.sinRot + baseY*ctx.cosRot
+
+			radius := math.Hypot(rotX, rotY)
+			angle := math.Atan2(rotY, rotX)
+			if ctx.swirlStrength != 0 {
+				strength := ctx.swirlStrength
+				switch ctx.quality {
+				case qualityEco:
+					strength *= 0.55
+				case qualityBalanced:
+					strength *= 0.85
+				}
+				atten := math.Exp(-radius * 1.6)
+				angle += strength * atten * math.Sin(ctx.time*1.5+radius*2.3)
+				radius += strength * 0.12 * math.Sin(ctx.time*1.15+angle*1.4)
+			}
+
+			distortedX := radius * math.Cos(angle)
+			distortedY := radius * math.Sin(angle)
+
+			if ctx.warpStrength > 0 {
+				warpVal := 0.0
+				if warp != nil && index < len(warp) {
+					warpVal = warp[index]
+				} else if ctx.noiseScale > 0 {
+					warpVal = fractalNoise((vx+ctx.time*0.15)/ctx.noiseScale, (vy-ctx.time*0.12)/ctx.noiseScale)
+				}
+				strength := ctx.warpStrength
+				switch ctx.quality {
+				case qualityEco:
+					strength *= 0.35
+				case qualityBalanced:
+					strength *= 0.7
+				}
+				distortedX += warpVal * strength
+				distortedY += warpVal * strength
+			}
+
+			results[index] = fractalNoise(distortedX*2+ctx.time*0.4, distortedY*2-ctx.time*0.3)
+		}
+	}
+	return results
 }
 
 func colorModeLabel(mode colorMode) string {
