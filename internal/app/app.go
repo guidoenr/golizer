@@ -35,6 +35,7 @@ type Config struct {
 	Quality        string
 	AutoRandomize  bool
 	RandomInterval time.Duration
+	ProfileLog     string
 	Log            *log.Logger
 }
 
@@ -72,6 +73,7 @@ type App struct {
 	frameBuffer    strings.Builder
 	prevLines      []string
 	currentLines   []string
+	profiler       *profiler
 }
 
 // New constructs the application using the provided configuration.
@@ -163,6 +165,9 @@ func New(cfg Config) (*App, error) {
 	if cfg.ColorMode != "" {
 		app.params.ColorMode = strings.ToLower(cfg.ColorMode)
 	}
+	if cfg.ProfileLog != "" {
+		app.profiler = newProfiler(cfg.ProfileLog, cfg.Log)
+	}
 	return app, nil
 }
 
@@ -225,6 +230,9 @@ func (a *App) Run(ctx context.Context) error {
 
 // Close releases held resources.
 func (a *App) Close() error {
+	if a.profiler != nil {
+		_ = a.profiler.Close()
+	}
 	if a.capture != nil {
 		return a.capture.Close()
 	}
@@ -232,6 +240,10 @@ func (a *App) Close() error {
 }
 
 func (a *App) step() error {
+	if a.profiler != nil {
+		a.profiler.beginFrame()
+	}
+
 	a.ensureDimensions()
 
 	now := time.Now()
@@ -243,16 +255,28 @@ func (a *App) step() error {
 
 	var features analyzer.Features
 	if a.capture != nil && a.analyzer != nil {
+		if a.profiler != nil {
+			a.profiler.markSection("capture")
+		}
 		a.sampleBuffer = a.capture.SamplesInto(a.sampleBuffer)
+		if a.profiler != nil {
+			a.profiler.markSection("analyze")
+		}
 		features = a.analyzer.Analyze(a.sampleBuffer, delta)
 	} else if a.fake != nil {
 		features = a.fake.Next(delta)
+	}
+	if a.profiler != nil {
+		a.profiler.markSection("params")
 	}
 
 	a.params.ApplyFeatures(features, delta)
 	a.params.UpdateTime(delta)
 
 	fps := 1.0 / delta
+	if a.profiler != nil {
+		a.profiler.markSection("render")
+	}
 	frame := a.renderer.Render(a.params, features, fps)
 	statusText := frame.Status
 	if a.deviceLabel != "" && a.cfg.DisableAudio == false {
@@ -303,6 +327,11 @@ func (a *App) step() error {
 		a.prevLines = a.prevLines[:len(a.currentLines)]
 	}
 	copy(a.prevLines, a.currentLines)
+
+	if a.profiler != nil {
+		a.profiler.markSection("flush")
+		a.profiler.endFrame()
+	}
 
 	return nil
 }

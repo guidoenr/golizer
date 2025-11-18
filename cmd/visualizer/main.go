@@ -37,6 +37,7 @@ func main() {
 		quality    = flag.String("quality", "auto", "Quality preset (auto|high|balanced|eco)")
 		autoRandom = flag.Bool("auto-randomize", true, "Automatically randomize visuals periodically")
 		randomFreq = flag.Duration("randomize-interval", 10*time.Second, "Interval between automatic visual randomization")
+		profileLog = flag.String("profile-log", "", "Optional path to append frame timing metrics")
 	)
 
 	flag.Parse()
@@ -150,6 +151,7 @@ func main() {
 		Quality:        qualityName,
 		AutoRandomize:  *autoRandom,
 		RandomInterval: *randomFreq,
+		ProfileLog:     *profileLog,
 		Log:            logger,
 	}
 
