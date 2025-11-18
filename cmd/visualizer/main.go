@@ -153,24 +153,8 @@ func main() {
 		Log:            logger,
 	}
 
-	if appConfig.Quality == "eco" {
-		if !flagIsPassed("status") {
-			appConfig.ShowStatusBar = false
-		}
-		if !flagIsPassed("color-on-audio") {
-			appConfig.ColorOnAudio = false
-		}
-		if !flagIsPassed("fps") && appConfig.TargetFPS > 48 {
-			appConfig.TargetFPS = 48
-		}
-		if !flagIsPassed("auto-randomize") {
-			appConfig.AutoRandomize = false
-		}
-		if !flagIsPassed("no-color") && !flagIsPassed("color-mode") {
-			appConfig.UseANSI = false
-			appConfig.ColorMode = "mono"
-			logger.Printf("eco preset -> ANSI color disabled for performance")
-		}
+	if appConfig.Quality == "eco" && !flagIsPassed("fps") && appConfig.TargetFPS > 48 {
+		appConfig.TargetFPS = 48
 	}
 
 	a, err := app.New(appConfig)
