@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-git pull;
+#git pull;
 
 REPO_ROOT="${REPO_ROOT:-$(pwd)}"
 SUDO_BIN="${SUDO:-sudo}"
