@@ -1,6 +1,7 @@
 package render
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"runtime"
@@ -26,6 +27,22 @@ const (
 	qualityBalanced qualityMode = "balanced"
 	qualityEco      qualityMode = "eco"
 )
+
+type Backend string
+
+const (
+	BackendASCII Backend = "ascii"
+	BackendSDL   Backend = "sdl"
+)
+
+type backendMode int
+
+const (
+	backendASCII backendMode = iota
+	backendSDL
+)
+
+var ErrRendererQuit = errors.New("render: quit")
 
 var colorModeNames = []string{
 	string(colorModeChromatic),
@@ -82,8 +99,9 @@ func parseQualityMode(name string) qualityMode {
 	}
 }
 
-// Renderer converts parameter state into ASCII frames.
+// Renderer converts parameter state into ASCII frames or SDL textures.
 type Renderer struct {
+	mode          backendMode
 	width         int
 	height        int
 	palette       []rune
@@ -98,12 +116,14 @@ type Renderer struct {
 	xCoords       []float64
 	yCoords       []float64
 	statusBuilder strings.Builder
+	sdl           *sdlState
 }
 
 // Frame contains the rendered ASCII lines and optional status text.
 type Frame struct {
-	Lines  []string
-	Status string
+	Lines   []string
+	Status  string
+	Present func(status string) error
 }
 
 var (
@@ -119,15 +139,35 @@ func init() {
 
 // New creates a Renderer.
 func New(width, height int, paletteName, patternName, colorModeName, qualityName string, colorOnAudio bool, useANSI bool) (*Renderer, error) {
+	return NewWithBackend(BackendASCII, width, height, paletteName, patternName, colorModeName, qualityName, colorOnAudio, useANSI)
+}
+
+// NewWithBackend creates a renderer using the specified backend.
+func NewWithBackend(backend Backend, width, height int, paletteName, patternName, colorModeName, qualityName string, colorOnAudio bool, useANSI bool) (*Renderer, error) {
 	if width <= 0 || height <= 0 {
 		return nil, fmt.Errorf("invalid dimensions: width=%d height=%d", width, height)
 	}
 
-	r := &Renderer{
-		width:   width,
-		height:  height,
-		useANSI: useANSI,
+	switch backend {
+	case BackendSDL, BackendASCII, Backend("auto"):
+	default:
+		return nil, fmt.Errorf("unknown render backend %q", backend)
 	}
+
+	r := &Renderer{
+		width:  width,
+		height: height,
+	}
+
+	if backend == BackendSDL {
+		if err := r.initSDL(width, height); err != nil {
+			return nil, err
+		}
+	} else {
+		r.mode = backendASCII
+		r.useANSI = useANSI
+	}
+
 	r.SetQuality(qualityName)
 	r.Configure(paletteName, patternName, colorModeName, colorOnAudio)
 
@@ -179,6 +219,9 @@ func (r *Renderer) Resize(width, height int) {
 	if changed {
 		r.xCoords = nil
 		r.yCoords = nil
+		if r.mode == backendSDL {
+			r.resizeSDL()
+		}
 	}
 }
 
@@ -209,7 +252,6 @@ func (r *Renderer) Render(p params.Parameters, feat analyzer.Features, fps float
 
 	activation := r.audioActivation(feat)
 
-	lines := make([]string, r.height)
 	timeFactor := p.Time
 	scale := p.Scale
 	if scale <= 0 {
@@ -236,6 +278,12 @@ func (r *Renderer) Render(p params.Parameters, feat analyzer.Features, fps float
 	if frameCtx.detailWeight > 0 {
 		noiseDetail = r.precomputeDetailNoise(width, height, xCoords, yCoords, scale, frameCtx, noiseWarp)
 	}
+
+	if r.mode == backendSDL {
+		return r.renderSDL(p, feat, fps, frameCtx, activation, xCoords, yCoords, scale, noiseWarp, noiseDetail)
+	}
+
+	lines := make([]string, r.height)
 
 	numWorkers := runtime.GOMAXPROCS(0)
 	if numWorkers > height {
@@ -310,6 +358,23 @@ func (r *Renderer) Render(p params.Parameters, feat analyzer.Features, fps float
 }
 
 func (r *Renderer) samplePixel(vx, vy float64, p params.Parameters, ctx frameParams, feat analyzer.Features, activation float64, noiseWarp, noiseDetail []float64, idx int) (rune, int) {
+	res := r.evaluatePixel(vx, vy, p, ctx, feat, activation, noiseWarp, noiseDetail, idx)
+	index := clampInt(int(res.glyphValue*float64(len(r.palette)-1)+0.5), 0, len(r.palette)-1)
+	colorIndex := 15
+	if r.useANSI {
+		colorIndex = hsvToANSI(res.h, res.s, res.v)
+	}
+	return r.palette[index], colorIndex
+}
+
+type pixelResult struct {
+	glyphValue float64
+	h          float64
+	s          float64
+	v          float64
+}
+
+func (r *Renderer) evaluatePixel(vx, vy float64, p params.Parameters, ctx frameParams, feat analyzer.Features, activation float64, noiseWarp, noiseDetail []float64, idx int) pixelResult {
 	baseX := vx * ctx.zoom
 	baseY := vy * ctx.zoom
 
@@ -394,15 +459,14 @@ func (r *Renderer) samplePixel(vx, vy float64, p params.Parameters, ctx framePar
 	} else {
 		glyphValue = math.Pow(brightness, ctx.glyphSharpness)
 	}
-	index := clampInt(int(glyphValue*float64(len(r.palette)-1)+0.5), 0, len(r.palette)-1)
+	h, s, v := r.colorFromMode(combined, brightness, p, feat, activation)
 
-	colorIndex := 15
-	if r.useANSI {
-		h, s, v := r.colorFromMode(combined, brightness, p, feat, activation)
-		colorIndex = hsvToANSI(h, s, v)
+	return pixelResult{
+		glyphValue: glyphValue,
+		h:          h,
+		s:          s,
+		v:          v,
 	}
-
-	return r.palette[index], colorIndex
 }
 
 type frameParams struct {
@@ -764,4 +828,18 @@ func appendFloat(builder *strings.Builder, value float64, precision int) {
 	var buf [32]byte
 	b := strconv.AppendFloat(buf[:0], value, 'f', precision, 64)
 	builder.Write(b)
+}
+
+func (r *Renderer) IsWindowed() bool {
+	if r.mode != backendSDL {
+		return false
+	}
+	return r.windowedSDL()
+}
+
+func (r *Renderer) Close() error {
+	if r.mode == backendSDL {
+		return r.closeSDL()
+	}
+	return nil
 }

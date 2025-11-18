@@ -3,7 +3,7 @@
 set -euo pipefail
 
 GO_VERSION="${GO_VERSION:-1.24.10}"
-APT_PACKAGES=(curl tar git build-essential portaudio19-dev)
+APT_PACKAGES=(curl tar git build-essential pkg-config portaudio19-dev libsdl2-2.0-0 libsdl2-dev)
 
 ARCH="$(uname -m)"
 case "${ARCH}" in

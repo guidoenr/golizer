@@ -16,6 +16,7 @@ import (
 
 	"github.com/guidoenr/golizer/internal/app"
 	"github.com/guidoenr/golizer/internal/audio"
+	"github.com/guidoenr/golizer/internal/render"
 	"golang.org/x/term"
 )
 
@@ -38,6 +39,7 @@ func main() {
 		quality    = flag.String("quality", "auto", "Quality preset (auto|high|balanced|eco)")
 		autoRandom = flag.Bool("auto-randomize", true, "Automatically randomize visuals periodically")
 		randomFreq = flag.Duration("randomize-interval", 10*time.Second, "Interval between automatic visual randomization")
+		backend    = flag.String("backend", "auto", "Renderer backend (auto|ascii|sdl)")
 		profileLog = flag.String("profile-log", "", "Optional path to append frame timing metrics")
 	)
 
@@ -52,6 +54,11 @@ func main() {
 		} else {
 			*profileLog = filepath.Join(os.TempDir(), "golizer_profile.csv")
 		}
+	}
+
+	backendName, err := resolveBackend(*backend)
+	if err != nil {
+		log.Fatalf("backend: %v", err)
 	}
 
 	if *width <= 0 || *height <= 0 {
@@ -88,6 +95,9 @@ func main() {
 
 	if *profileLog != "" {
 		logger.Printf("profile log -> %s", *profileLog)
+	}
+	if backendName != "" {
+		logger.Printf("render backend -> %s", backendName)
 	}
 
 	needAudio := !*noAudio || *listDevs
@@ -165,6 +175,7 @@ func main() {
 		AutoRandomize:  *autoRandom,
 		RandomInterval: *randomFreq,
 		ProfileLog:     *profileLog,
+		Backend:        backendName,
 		Log:            logger,
 	}
 
@@ -274,4 +285,29 @@ func flagIsPassed(name string) bool {
 		}
 	})
 	return found
+}
+
+func resolveBackend(input string) (string, error) {
+	value := strings.ToLower(strings.TrimSpace(input))
+	if value == "" || value == "auto" {
+		if env := strings.TrimSpace(os.Getenv("GOLIZER_BACKEND")); env != "" {
+			value = strings.ToLower(env)
+		}
+	}
+	switch value {
+	case "", "auto":
+		if render.SupportsSDL() && runtime.GOOS == "linux" && (runtime.GOARCH == "arm64" || runtime.GOARCH == "arm") {
+			return "sdl", nil
+		}
+		return "ascii", nil
+	case "ascii", "terminal", "tty":
+		return "ascii", nil
+	case "sdl", "window":
+		if !render.SupportsSDL() {
+			return "", fmt.Errorf("SDL backend not available in this build (rebuild with -tags sdl)")
+		}
+		return "sdl", nil
+	default:
+		return "", fmt.Errorf("unknown backend %q", input)
+	}
 }

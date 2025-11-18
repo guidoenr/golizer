@@ -2,7 +2,6 @@
 
 set -euo pipefail
 
-
 git pull;
 
 REPO_ROOT="${REPO_ROOT:-$(pwd)}"
@@ -14,8 +13,25 @@ echo "==> Downloading Go dependencies"
 pushd "${REPO_ROOT}" >/dev/null
 go mod tidy
 
+echo "==> Detecting render backend support"
+BUILD_TAGS="${BUILD_TAGS:-}"
+if pkg-config --exists sdl2 >/dev/null 2>&1; then
+	if [[ -z "${BUILD_TAGS}" ]]; then
+		BUILD_TAGS="sdl"
+	else
+		BUILD_TAGS="${BUILD_TAGS} sdl"
+	fi
+	echo "    SDL2 detected -> enabling SDL backend (-tags ${BUILD_TAGS})"
+else
+	echo "    SDL2 not detected -> building ASCII backend only"
+fi
+
 echo "==> Building golizer binary"
-go build -o golizer ./cmd/visualizer
+if [[ -n "${BUILD_TAGS}" ]]; then
+	go build -tags "${BUILD_TAGS}" -o golizer ./cmd/visualizer
+else
+	go build -o golizer ./cmd/visualizer
+fi
 popd >/dev/null
 
 echo "==> Installing binary with high-priority wrapper (sudo may prompt)"

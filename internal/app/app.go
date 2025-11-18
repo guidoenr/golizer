@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"math/rand"
@@ -35,6 +36,7 @@ type Config struct {
 	Quality        string
 	AutoRandomize  bool
 	RandomInterval time.Duration
+	Backend        string
 	ProfileLog     string
 	Log            *log.Logger
 }
@@ -74,6 +76,7 @@ type App struct {
 	prevLines      []string
 	currentLines   []string
 	profiler       *profiler
+	windowMode     bool
 }
 
 // New constructs the application using the provided configuration.
@@ -102,7 +105,17 @@ func New(cfg Config) (*App, error) {
 		renderHeight--
 	}
 
-	renderer, err := render.New(cfg.Width, renderHeight, cfg.Palette, cfg.Pattern, cfg.ColorMode, cfg.Quality, cfg.ColorOnAudio, cfg.UseANSI)
+	var backend render.Backend
+	switch strings.ToLower(strings.TrimSpace(cfg.Backend)) {
+	case "", "ascii", "terminal":
+		backend = render.BackendASCII
+	case "sdl", "window":
+		backend = render.BackendSDL
+	default:
+		return nil, fmt.Errorf("unknown render backend %q", cfg.Backend)
+	}
+
+	renderer, err := render.NewWithBackend(backend, cfg.Width, renderHeight, cfg.Palette, cfg.Pattern, cfg.ColorMode, cfg.Quality, cfg.ColorOnAudio, cfg.UseANSI)
 	if err != nil {
 		return nil, err
 	}
@@ -122,6 +135,10 @@ func New(cfg Config) (*App, error) {
 		paletteOptions: render.PaletteNames(),
 		patternOptions: render.PatternNames(),
 		colorOptions:   render.ColorModeNames(),
+	}
+	app.windowMode = renderer.IsWindowed()
+	if app.windowMode {
+		app.cfg.ShowStatusBar = false
 	}
 	if len(app.paletteOptions) == 0 {
 		app.paletteOptions = []string{"default"}
@@ -188,13 +205,15 @@ func (a *App) Run(ctx context.Context) error {
 		defer randomTicker.Stop()
 	}
 
-	enterAltScreen()
-	clearScreen()
-	hideCursor()
-	defer func() {
-		showCursor()
-		exitAltScreen()
-	}()
+	if !a.windowMode {
+		enterAltScreen()
+		clearScreen()
+		hideCursor()
+		defer func() {
+			showCursor()
+			exitAltScreen()
+		}()
+	}
 
 	inputCtx, cancelInput := context.WithCancel(ctx)
 	defer cancelInput()
@@ -204,7 +223,9 @@ func (a *App) Run(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			moveCursorHome()
+			if !a.windowMode {
+				moveCursorHome()
+			}
 			return ctx.Err()
 		case evt, ok := <-a.inputEvents:
 			if !ok {
@@ -215,13 +236,18 @@ func (a *App) Run(ctx context.Context) error {
 			case inputEventRandomize:
 				a.randomizeVisuals()
 			case inputEventQuit:
-				moveCursorHome()
+				if !a.windowMode {
+					moveCursorHome()
+				}
 				return nil
 			}
 		case <-randomCh:
 			a.randomizeVisuals()
 		case <-ticker.C:
 			if err := a.step(); err != nil {
+				if errors.Is(err, render.ErrRendererQuit) {
+					return nil
+				}
 				return err
 			}
 		}
@@ -233,10 +259,18 @@ func (a *App) Close() error {
 	if a.profiler != nil {
 		_ = a.profiler.Close()
 	}
-	if a.capture != nil {
-		return a.capture.Close()
+	var firstErr error
+	if a.renderer != nil {
+		if err := a.renderer.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
 	}
-	return nil
+	if a.capture != nil {
+		if err := a.capture.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
 }
 
 func (a *App) step() error {
@@ -281,6 +315,19 @@ func (a *App) step() error {
 	statusText := frame.Status
 	if a.deviceLabel != "" && a.cfg.DisableAudio == false {
 		statusText = fmt.Sprintf("%s | mic=%s", statusText, a.deviceLabel)
+	}
+
+	if frame.Present != nil {
+		if a.profiler != nil {
+			a.profiler.markSection("present")
+		}
+		if err := frame.Present(statusText); err != nil {
+			return err
+		}
+		if a.profiler != nil {
+			a.profiler.endFrame()
+		}
+		return nil
 	}
 
 	a.frameBuffer.Reset()
@@ -337,6 +384,9 @@ func (a *App) step() error {
 }
 
 func (a *App) ensureDimensions() {
+	if a.windowMode {
+		return
+	}
 	fd := int(os.Stdout.Fd())
 	if fd < 0 {
 		return
@@ -366,6 +416,10 @@ func (a *App) ensureDimensions() {
 }
 
 func (a *App) startInputListener(ctx context.Context) {
+	if a.windowMode {
+		a.inputEvents = nil
+		return
+	}
 	if err := keyboard.Open(); err != nil {
 		a.log.Printf("keyboard input disabled: %v", err)
 		a.inputEvents = nil
