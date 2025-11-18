@@ -2,6 +2,9 @@
 
 set -euo pipefail
 
+
+git pull;
+
 REPO_ROOT="${REPO_ROOT:-$(pwd)}"
 SUDO_BIN="${SUDO:-sudo}"
 INSTALL_ROOT="/usr/local/lib/golizer"
