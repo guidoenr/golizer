@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	rdebug "runtime/debug"
 	"strings"
 	"syscall"
 	"time"
@@ -39,6 +40,9 @@ func main() {
 	)
 
 	flag.Parse()
+
+	runtime.GOMAXPROCS(runtime.NumCPU())
+	rdebug.SetGCPercent(200)
 
 	if *width <= 0 || *height <= 0 {
 		log.Fatalf("invalid dimensions: width=%d height=%d", *width, *height)
