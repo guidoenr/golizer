@@ -5,6 +5,7 @@ import (
 	"math"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -83,23 +84,37 @@ func parseQualityMode(name string) qualityMode {
 
 // Renderer converts parameter state into ASCII frames.
 type Renderer struct {
-	width        int
-	height       int
-	palette      []rune
-	paletteName  string
-	pattern      patternFunc
-	patternName  string
-	detailMix    float64
-	colorMode    colorMode
-	quality      qualityMode
-	colorOnAudio bool
-	useANSI      bool
+	width         int
+	height        int
+	palette       []rune
+	paletteName   string
+	pattern       patternFunc
+	patternName   string
+	detailMix     float64
+	colorMode     colorMode
+	quality       qualityMode
+	colorOnAudio  bool
+	useANSI       bool
+	xCoords       []float64
+	yCoords       []float64
+	statusBuilder strings.Builder
 }
 
 // Frame contains the rendered ASCII lines and optional status text.
 type Frame struct {
 	Lines  []string
 	Status string
+}
+
+var (
+	resetANSI       = "\x1b[0m"
+	precomputedANSI [256]string
+)
+
+func init() {
+	for i := range precomputedANSI {
+		precomputedANSI[i] = "\x1b[38;5;" + strconv.Itoa(i) + "m"
+	}
 }
 
 // New creates a Renderer.
@@ -148,11 +163,22 @@ func (r *Renderer) Configure(paletteName, patternName, colorModeName string, col
 
 // Resize updates the framebuffer dimensions.
 func (r *Renderer) Resize(width, height int) {
+	changed := false
 	if width > 0 {
-		r.width = width
+		if r.width != width {
+			r.width = width
+			changed = true
+		}
 	}
 	if height > 0 {
-		r.height = height
+		if r.height != height {
+			r.height = height
+			changed = true
+		}
+	}
+	if changed {
+		r.xCoords = nil
+		r.yCoords = nil
 	}
 }
 
@@ -170,7 +196,9 @@ func (r *Renderer) SetQuality(name string) {
 	if name == "" {
 		name = string(qualityBalanced)
 	}
-	r.quality = parseQualityMode(name)
+	mode := parseQualityMode(name)
+	r.quality = mode
+	setNoiseProfile(r.quality)
 }
 
 // Render generates a frame based on parameters and features.
@@ -192,9 +220,11 @@ func (r *Renderer) Render(p params.Parameters, feat analyzer.Features, fps float
 
 	width := r.width
 	height := r.height
-	invWidth := 1.0 / float64(width)
-	invHeight := 1.0 / float64(height)
 	useANSI := r.useANSI
+
+	r.ensureCoordinateCache(width, height)
+	xCoords := r.xCoords
+	yCoords := r.yCoords
 
 	numWorkers := runtime.GOMAXPROCS(0)
 	if numWorkers > height {
@@ -214,17 +244,21 @@ func (r *Renderer) Render(p params.Parameters, feat analyzer.Features, fps float
 			for y := range rowJobs {
 				var builder strings.Builder
 				builder.Grow(width * 8)
-				vy := (float64(y)*invHeight - 0.5) * scale
+				lastColor := -1
+				vy := yCoords[y] * scale
 				for x := 0; x < width; x++ {
-					vx := (float64(x)*invWidth - 0.5) * scale
+					vx := xCoords[x] * scale
 					char, fg := r.samplePixel(vx, vy, p, frameCtx, feat, activation)
 					if useANSI {
-						builder.WriteString(colorCode(fg))
+						if fg != lastColor {
+							builder.WriteString(colorCode(fg))
+							lastColor = fg
+						}
 					}
 					builder.WriteRune(char)
 				}
 				if useANSI {
-					builder.WriteString("\x1b[0m")
+					builder.WriteString(resetANSI)
 				}
 				lines[y] = builder.String()
 			}
@@ -237,24 +271,7 @@ func (r *Renderer) Render(p params.Parameters, feat analyzer.Features, fps float
 	close(rowJobs)
 	wg.Wait()
 
-	status := fmt.Sprintf(
-		"%s | palette=%s pattern=%s quality=%s%s | bass %.2f mid %.2f treble %.2f beat %.2f fps %.1f",
-		strings.ToUpper(string(r.colorMode)),
-		r.paletteName,
-		r.patternName,
-		r.QualityName(),
-		func() string {
-			if r.colorOnAudio {
-				return " col=AUDIO"
-			}
-			return ""
-		}(),
-		feat.Bass,
-		feat.Mid,
-		feat.Treble,
-		feat.BeatStrength,
-		fps,
-	)
+	status := r.buildStatus(feat, fps)
 
 	return Frame{
 		Lines:  lines,
@@ -453,7 +470,12 @@ func (r *Renderer) colorFromMode(base, brightness float64, p params.Parameters, 
 }
 
 func colorCode(index int) string {
-	return fmt.Sprintf("\x1b[38;5;%dm", index)
+	if index < 0 {
+		index = 0
+	} else if index >= len(precomputedANSI) {
+		index = len(precomputedANSI) - 1
+	}
+	return precomputedANSI[index]
 }
 
 func hsvToANSI(h, s, v float64) int {
@@ -554,4 +576,79 @@ func (r *Renderer) audioActivation(feat analyzer.Features) float64 {
 		base += 0.3
 	}
 	return clamp01(base)
+}
+
+func (r *Renderer) ensureCoordinateCache(width, height int) {
+	if len(r.xCoords) != width {
+		r.xCoords = make([]float64, width)
+		if width <= 1 {
+			for i := range r.xCoords {
+				r.xCoords[i] = 0
+			}
+		} else {
+			scale := 1.0 / float64(width)
+			for x := range r.xCoords {
+				r.xCoords[x] = float64(x)*scale - 0.5
+			}
+		}
+	}
+	if len(r.yCoords) != height {
+		r.yCoords = make([]float64, height)
+		if height <= 1 {
+			for i := range r.yCoords {
+				r.yCoords[i] = 0
+			}
+		} else {
+			scale := 1.0 / float64(height)
+			for y := range r.yCoords {
+				r.yCoords[y] = float64(y)*scale - 0.5
+			}
+		}
+	}
+}
+
+func (r *Renderer) buildStatus(feat analyzer.Features, fps float64) string {
+	builder := &r.statusBuilder
+	builder.Reset()
+	builder.Grow(128)
+	builder.WriteString(colorModeLabel(r.colorMode))
+	builder.WriteString(" | palette=")
+	builder.WriteString(r.paletteName)
+	builder.WriteString(" pattern=")
+	builder.WriteString(r.patternName)
+	builder.WriteString(" quality=")
+	builder.WriteString(r.QualityName())
+	if r.colorOnAudio {
+		builder.WriteString(" col=AUDIO")
+	}
+	builder.WriteString(" | bass ")
+	appendFloat(builder, feat.Bass, 2)
+	builder.WriteString(" mid ")
+	appendFloat(builder, feat.Mid, 2)
+	builder.WriteString(" treble ")
+	appendFloat(builder, feat.Treble, 2)
+	builder.WriteString(" beat ")
+	appendFloat(builder, feat.BeatStrength, 2)
+	builder.WriteString(" fps ")
+	appendFloat(builder, fps, 1)
+	return builder.String()
+}
+
+func colorModeLabel(mode colorMode) string {
+	switch mode {
+	case colorModeFire:
+		return "FIRE"
+	case colorModeAurora:
+		return "AURORA"
+	case colorModeMono:
+		return "MONO"
+	default:
+		return "CHROMATIC"
+	}
+}
+
+func appendFloat(builder *strings.Builder, value float64, precision int) {
+	var buf [32]byte
+	b := strconv.AppendFloat(buf[:0], value, 'f', precision, 64)
+	builder.Write(b)
 }

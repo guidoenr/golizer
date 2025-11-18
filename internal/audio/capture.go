@@ -115,19 +115,29 @@ func (c *Capture) Device() *portaudio.DeviceInfo {
 
 // Samples returns the most recent samples copied out of the internal ring buffer.
 func (c *Capture) Samples() []float32 {
+	return c.SamplesInto(nil)
+}
+
+// SamplesInto copies the most recent samples into dst, reusing the slice when possible.
+func (c *Capture) SamplesInto(dst []float32) []float32 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	if c.index == 0 {
-		cp := make([]float32, len(c.buffer))
-		copy(cp, c.buffer)
-		return cp
+	size := len(c.buffer)
+	if cap(dst) < size {
+		dst = make([]float32, size)
+	} else {
+		dst = dst[:size]
 	}
 
-	cp := make([]float32, len(c.buffer))
-	copy(cp, c.buffer[c.index:])
-	copy(cp[len(c.buffer)-c.index:], c.buffer[:c.index])
-	return cp
+	if c.index == 0 {
+		copy(dst, c.buffer)
+		return dst
+	}
+
+	copy(dst, c.buffer[c.index:])
+	copy(dst[size-c.index:], c.buffer[:c.index])
+	return dst
 }
 
 func (c *Capture) process(in []float32) {

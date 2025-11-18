@@ -3,6 +3,7 @@ package render
 import (
 	"math"
 	"sort"
+	"sync/atomic"
 
 	"github.com/guidoenr/golizer/internal/params"
 )
@@ -23,6 +24,12 @@ var patternRegistry = map[string]patternEntry{
 	"bands":   {patternBands, 0.0},
 	"strata":  {patternStrata, 0.1},
 	"orbits":  {patternOrbits, 0.15},
+}
+
+var noiseOctaves atomic.Int32
+
+func init() {
+	noiseOctaves.Store(4)
 }
 
 // PatternNames returns the available pattern identifiers.
@@ -87,12 +94,16 @@ func patternOrbits(x, y float64, p params.Parameters, t float64) float64 {
 }
 
 func fractalNoise(x, y float64) float64 {
+	octaves := int(noiseOctaves.Load())
+	if octaves <= 0 {
+		octaves = 1
+	}
 	amp := 0.5
 	freq := 1.0
 	total := 0.0
 	sumAmp := 0.0
 
-	for i := 0; i < 4; i++ {
+	for i := 0; i < octaves; i++ {
 		total += valueNoise2(x*freq, y*freq) * amp
 		sumAmp += amp
 		amp *= 0.5
@@ -126,7 +137,14 @@ func valueNoise2(x, y float64) float64 {
 }
 
 func hash2(x, y float64) float64 {
-	return frac(math.Sin(x*127.1+y*311.7) * 43758.5453123)
+	xi := int64(x)
+	yi := int64(y)
+	// Combine coordinates using a variation of SplitMix64 for good distribution without trig.
+	n := uint64(xi)<<32 ^ uint64(uint32(yi))
+	n = (n ^ (n >> 33)) * 0xff51afd7ed558ccd
+	n = (n ^ (n >> 33)) * 0xc4ceb9fe1a85ec53
+	n = n ^ (n >> 33)
+	return float64(n&0xffffff) / 16777216.0
 }
 
 func smoothstep(v float64) float64 {
@@ -137,6 +155,13 @@ func lerpFloat(a, b, t float64) float64 {
 	return a*(1-t) + b*t
 }
 
-func frac(v float64) float64 {
-	return v - math.Floor(v)
+func setNoiseProfile(mode qualityMode) {
+	switch mode {
+	case qualityEco:
+		noiseOctaves.Store(2)
+	case qualityBalanced:
+		noiseOctaves.Store(3)
+	default:
+		noiseOctaves.Store(4)
+	}
 }

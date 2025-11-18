@@ -20,6 +20,9 @@ type Analyzer struct {
 	dropCooldown float64
 
 	historySize int
+
+	buffer []complex128
+	window []float64
 }
 
 // Config controls Analyzer behavior.
@@ -55,14 +58,18 @@ func (a *Analyzer) Analyze(samples []float32, deltaTime float64) Features {
 		size = 256
 	}
 
-	buffer := make([]complex128, size)
+	a.ensureWorkspace(size)
+
+	buffer := a.buffer[:size]
+	window := a.window[:size]
+
+	sampleCount := len(samples)
 	for i := 0; i < size; i++ {
-		if i < len(samples) {
-			window := hann(float64(i), float64(size))
-			buffer[i] = complex(float64(samples[i])*window, 0)
-		} else {
-			buffer[i] = 0
+		if i < sampleCount {
+			buffer[i] = complex(float64(samples[i])*window[i], 0)
+			continue
 		}
+		buffer[i] = 0
 	}
 
 	fftRes := fft.FFT(buffer)
@@ -174,6 +181,19 @@ func (a *Analyzer) energyVariance() float64 {
 
 func hann(i, size float64) float64 {
 	return 0.5 * (1.0 - math.Cos(2.0*math.Pi*i/size))
+}
+
+func (a *Analyzer) ensureWorkspace(size int) {
+	if len(a.buffer) != size {
+		a.buffer = make([]complex128, size)
+	}
+	if len(a.window) != size {
+		a.window = make([]float64, size)
+		sizeF := float64(size)
+		for i := range a.window {
+			a.window[i] = hann(float64(i), sizeF)
+		}
+	}
 }
 
 func cmag(c complex128) float64 {

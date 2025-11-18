@@ -68,6 +68,8 @@ type App struct {
 	autoRandomize  bool
 	randomInterval time.Duration
 	lastRandom     time.Time
+	sampleBuffer   []float32
+	frameBuffer    strings.Builder
 }
 
 // New constructs the application using the provided configuration.
@@ -239,8 +241,8 @@ func (a *App) step() error {
 
 	var features analyzer.Features
 	if a.capture != nil && a.analyzer != nil {
-		samples := a.capture.Samples()
-		features = a.analyzer.Analyze(samples, delta)
+		a.sampleBuffer = a.capture.SamplesInto(a.sampleBuffer)
+		features = a.analyzer.Analyze(a.sampleBuffer, delta)
 	} else if a.fake != nil {
 		features = a.fake.Next(delta)
 	}
@@ -256,12 +258,33 @@ func (a *App) step() error {
 	}
 
 	moveCursorHome()
-	for _, line := range frame.Lines {
-		fmt.Println(line)
-	}
+	a.frameBuffer.Reset()
+
+	lineCount := len(frame.Lines)
+	approx := (a.width + 8) * lineCount
 	if a.cfg.ShowStatusBar {
-		fmt.Println(statusBar(statusText, a.width))
+		approx += a.width + 8
 	}
+	if approx > 0 {
+		a.frameBuffer.Grow(approx)
+	}
+
+	for _, line := range frame.Lines {
+		a.frameBuffer.WriteString(line)
+		a.frameBuffer.WriteByte('\n')
+	}
+
+	if a.cfg.ShowStatusBar {
+		a.frameBuffer.WriteString(statusBar(statusText, a.width))
+		a.frameBuffer.WriteByte('\n')
+	}
+
+	output := a.frameBuffer.String()
+	if _, err := os.Stdout.WriteString(output); err != nil {
+		return err
+	}
+	a.frameBuffer.Reset()
+
 	return nil
 }
 

@@ -1,7 +1,24 @@
 #!/bin/bash
 
+echo "==> Downloading Go dependencies"
+pushd "${REPO_ROOT}" >/dev/null
+go mod tidy
+
+echo "==> Building golizer binary"
 go build -o golizer ./cmd/visualizer
+popd >/dev/null
 
-sudo mv golizer /usr/local/bin/golizer
+echo "==> Installing binary to /usr/local/bin (sudo may prompt)"
+"${SUDO}" install -m 0755 "${REPO_ROOT}/golizer" /usr/local/bin/golizer
+rm -f "${REPO_ROOT}/golizer"
 
+echo ""
+echo "golizer is ready!"
+echo "Binary: /usr/local/bin/golizer"
+echo ""
+echo "If this is your first time installing Go, reload your shell or run:"
+echo "  source ~/.profile"
+echo ""
+echo "Recommended Raspberry Pi run:"
+echo "  golizer --quality auto --pattern auto --palette auto --status=false --fps 72 --color-on-audio"
 
