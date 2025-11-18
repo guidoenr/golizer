@@ -234,41 +234,59 @@ func (r *Renderer) Render(p params.Parameters, feat analyzer.Features, fps float
 		numWorkers = 1
 	}
 
+	tileHeight := 4
+	if tileHeight > height {
+		tileHeight = height
+	}
+	tileCount := (height + tileHeight - 1) / tileHeight
+
+	type tile struct {
+		start int
+		end   int
+	}
+
+	jobCh := make(chan tile, tileCount)
 	var wg sync.WaitGroup
-	rowJobs := make(chan int, numWorkers)
 
 	for w := 0; w < numWorkers; w++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for y := range rowJobs {
-				var builder strings.Builder
-				builder.Grow(width * 8)
-				lastColor := -1
-				vy := yCoords[y] * scale
-				for x := 0; x < width; x++ {
-					vx := xCoords[x] * scale
-					char, fg := r.samplePixel(vx, vy, p, frameCtx, feat, activation)
-					if useANSI {
-						if fg != lastColor {
-							builder.WriteString(colorCode(fg))
-							lastColor = fg
+			var builder strings.Builder
+			builder.Grow(width * 8)
+			for t := range jobCh {
+				for y := t.start; y < t.end; y++ {
+					builder.Reset()
+					lastColor := -1
+					vy := yCoords[y] * scale
+					for x := 0; x < width; x++ {
+						vx := xCoords[x] * scale
+						char, fg := r.samplePixel(vx, vy, p, frameCtx, feat, activation)
+						if useANSI {
+							if fg != lastColor {
+								builder.WriteString(colorCode(fg))
+								lastColor = fg
+							}
 						}
+						builder.WriteRune(char)
 					}
-					builder.WriteRune(char)
+					if useANSI {
+						builder.WriteString(resetANSI)
+					}
+					lines[y] = builder.String()
 				}
-				if useANSI {
-					builder.WriteString(resetANSI)
-				}
-				lines[y] = builder.String()
 			}
 		}()
 	}
 
-	for y := 0; y < height; y++ {
-		rowJobs <- y
+	for start := 0; start < height; start += tileHeight {
+		end := start + tileHeight
+		if end > height {
+			end = height
+		}
+		jobCh <- tile{start: start, end: end}
 	}
-	close(rowJobs)
+	close(jobCh)
 	wg.Wait()
 
 	status := r.buildStatus(feat, fps)
@@ -398,10 +416,10 @@ func (r *Renderer) buildFrameParams(p params.Parameters, time float64) framePara
 
 	switch r.quality {
 	case qualityEco:
-		zoom = lerp(1.0, zoom, 0.6)
-		detailWeight *= 0.35
-		warpStrength *= 0.6
-		swirlStrength *= 0.7
+		zoom = lerp(1.0, zoom, 0.5)
+		detailWeight = 0
+		warpStrength = 0
+		swirlStrength *= 0.4
 	case qualityBalanced:
 		detailWeight *= 0.75
 		warpStrength *= 0.85

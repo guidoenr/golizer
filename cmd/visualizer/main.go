@@ -149,6 +149,26 @@ func main() {
 		Log:            logger,
 	}
 
+	if appConfig.Quality == "eco" {
+		if !flagIsPassed("status") {
+			appConfig.ShowStatusBar = false
+		}
+		if !flagIsPassed("color-on-audio") {
+			appConfig.ColorOnAudio = false
+		}
+		if !flagIsPassed("fps") && appConfig.TargetFPS > 48 {
+			appConfig.TargetFPS = 48
+		}
+		if !flagIsPassed("auto-randomize") {
+			appConfig.AutoRandomize = false
+		}
+		if !flagIsPassed("no-color") && !flagIsPassed("color-mode") {
+			appConfig.UseANSI = false
+			appConfig.ColorMode = "mono"
+			logger.Printf("eco preset -> ANSI color disabled for performance")
+		}
+	}
+
 	a, err := app.New(appConfig)
 	if err != nil {
 		logger.Fatalf("failed to create app: %v", err)
@@ -235,7 +255,7 @@ func resolvePatternName(requested string, quality string) string {
 func defaultFPSForQuality(quality string) float64 {
 	switch quality {
 	case "eco":
-		return 72
+		return 48
 	case "balanced":
 		return 180
 	default:

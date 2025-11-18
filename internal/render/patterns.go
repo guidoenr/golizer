@@ -158,10 +158,10 @@ func lerpFloat(a, b, t float64) float64 {
 func setNoiseProfile(mode qualityMode) {
 	switch mode {
 	case qualityEco:
-		noiseOctaves.Store(2)
+		noiseOctaves.Store(1)
 	case qualityBalanced:
-		noiseOctaves.Store(3)
+		noiseOctaves.Store(2)
 	default:
-		noiseOctaves.Store(4)
+		noiseOctaves.Store(3)
 	}
 }

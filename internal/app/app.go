@@ -70,6 +70,8 @@ type App struct {
 	lastRandom     time.Time
 	sampleBuffer   []float32
 	frameBuffer    strings.Builder
+	prevLines      []string
+	currentLines   []string
 }
 
 // New constructs the application using the provided configuration.
@@ -257,33 +259,50 @@ func (a *App) step() error {
 		statusText = fmt.Sprintf("%s | mic=%s", statusText, a.deviceLabel)
 	}
 
-	moveCursorHome()
 	a.frameBuffer.Reset()
 
-	lineCount := len(frame.Lines)
-	approx := (a.width + 8) * lineCount
+	a.currentLines = a.currentLines[:0]
+	a.currentLines = append(a.currentLines, frame.Lines...)
 	if a.cfg.ShowStatusBar {
-		approx += a.width + 8
-	}
-	if approx > 0 {
-		a.frameBuffer.Grow(approx)
+		a.currentLines = append(a.currentLines, statusBar(statusText, a.width))
 	}
 
-	for _, line := range frame.Lines {
+	// ensure previous lines slice has capacity
+	if len(a.prevLines) < len(a.currentLines) {
+		a.prevLines = append(a.prevLines, make([]string, len(a.currentLines)-len(a.prevLines))...)
+	}
+
+	for i := len(a.currentLines); i < len(a.prevLines); i++ {
+		a.prevLines[i] = ""
+	}
+
+	for idx, line := range a.currentLines {
+		if idx < len(a.prevLines) && a.prevLines[idx] == line {
+			continue
+		}
+		fmt.Fprintf(&a.frameBuffer, "\x1b[%d;1H", idx+1)
 		a.frameBuffer.WriteString(line)
-		a.frameBuffer.WriteByte('\n')
+		a.frameBuffer.WriteString("\x1b[K")
 	}
 
-	if a.cfg.ShowStatusBar {
-		a.frameBuffer.WriteString(statusBar(statusText, a.width))
-		a.frameBuffer.WriteByte('\n')
+	if len(a.currentLines) < len(a.prevLines) {
+		for idx := len(a.currentLines); idx < len(a.prevLines); idx++ {
+			fmt.Fprintf(&a.frameBuffer, "\x1b[%d;1H\x1b[K", idx+1)
+		}
 	}
 
-	output := a.frameBuffer.String()
-	if _, err := os.Stdout.WriteString(output); err != nil {
-		return err
+	if a.frameBuffer.Len() > 0 {
+		if _, err := os.Stdout.WriteString(a.frameBuffer.String()); err != nil {
+			return err
+		}
 	}
-	a.frameBuffer.Reset()
+
+	if cap(a.prevLines) < len(a.currentLines) {
+		a.prevLines = make([]string, len(a.currentLines))
+	} else {
+		a.prevLines = a.prevLines[:len(a.currentLines)]
+	}
+	copy(a.prevLines, a.currentLines)
 
 	return nil
 }
@@ -314,6 +333,7 @@ func (a *App) ensureDimensions() {
 	a.height = h
 	a.renderHeight = renderHeight
 	a.renderer.Resize(w, renderHeight)
+	a.prevLines = nil
 }
 
 func (a *App) startInputListener(ctx context.Context) {
