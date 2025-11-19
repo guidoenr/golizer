@@ -629,6 +629,8 @@ type ConfigGetter interface {
 	Quality() string
 	Width() int
 	Height() int
+	AutoRandomize() bool
+	RandomInterval() time.Duration
 }
 
 // GetConfig returns current configuration (thread-safe)
@@ -648,3 +650,61 @@ func (c *configWrapper) TargetFPS() float64  { return c.cfg.TargetFPS }
 func (c *configWrapper) Quality() string     { return c.cfg.Quality }
 func (c *configWrapper) Width() int          { return c.cfg.Width }
 func (c *configWrapper) Height() int         { return c.cfg.Height }
+func (c *configWrapper) AutoRandomize() bool { return c.cfg.AutoRandomize }
+func (c *configWrapper) RandomInterval() time.Duration { return c.cfg.RandomInterval }
+
+// SetNoiseFloor updates noise floor (thread-safe)
+func (a *App) SetNoiseFloor(v float64) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.cfg.NoiseFloor = v
+	// noise floor is used during analysis, no need to update analyzer
+}
+
+// SetBufferSize updates buffer size (thread-safe)
+func (a *App) SetBufferSize(v int) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.cfg.BufferSize = v
+	// note: buffer size change requires restart to take effect
+}
+
+// SetTargetFPS updates target FPS (thread-safe)
+func (a *App) SetTargetFPS(v float64) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.cfg.TargetFPS = v
+}
+
+// SetDimensions updates dimensions (thread-safe)
+func (a *App) SetDimensions(width, height int) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.width = width
+	a.height = height
+	a.cfg.Width = width
+	a.cfg.Height = height
+	a.renderHeight = height
+	if a.cfg.ShowStatusBar && a.renderHeight > 1 {
+		a.renderHeight--
+	}
+	if a.renderer != nil {
+		a.renderer.Resize(width, a.renderHeight)
+	}
+}
+
+// SetAutoRandomize updates auto randomize (thread-safe)
+func (a *App) SetAutoRandomize(v bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.autoRandomize = v
+	a.cfg.AutoRandomize = v
+}
+
+// SetRandomInterval updates random interval (thread-safe)
+func (a *App) SetRandomInterval(v time.Duration) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.randomInterval = v
+	a.cfg.RandomInterval = v
+}

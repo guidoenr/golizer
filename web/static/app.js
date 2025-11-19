@@ -28,14 +28,41 @@ async function loadOptions() {
 }
 
 function populateSelect(id, options) {
-	const select = document.getElementById(id);
-	select.innerHTML = "";
-	options.forEach((opt) => {
-		const option = document.createElement("option");
-		option.value = opt;
-		option.textContent = opt;
-		select.appendChild(option);
-	});
+	// check if it's a visual selector (pattern, palette, colorMode)
+	if (id === "pattern" || id === "palette" || id === "colorMode") {
+		const container = document.getElementById(id + "-selector");
+		if (!container) return;
+
+		container.innerHTML = "";
+		options.forEach((opt) => {
+			const btn = document.createElement("button");
+			btn.className = "option-btn";
+			btn.dataset.value = opt;
+			btn.textContent = opt;
+			btn.addEventListener("click", () => {
+				// remove active from all buttons
+				container.querySelectorAll(".option-btn").forEach((b) => {
+					b.classList.remove("active");
+				});
+				// add active to clicked button
+				btn.classList.add("active");
+				// send update immediately
+				sendUpdate({ [id]: opt });
+			});
+			container.appendChild(btn);
+		});
+	} else {
+		// fallback to select for other dropdowns
+		const select = document.getElementById(id);
+		if (!select) return;
+		select.innerHTML = "";
+		options.forEach((opt) => {
+			const option = document.createElement("option");
+			option.value = opt;
+			option.textContent = opt;
+			select.appendChild(option);
+		});
+	}
 }
 
 // websocket connection
@@ -110,6 +137,10 @@ function updateUI(data) {
 			data.renderer.colorOnAudio;
 	}
 
+	if (data.quality) {
+		setSelectValue("quality", data.quality);
+	}
+
 	if (data.params) {
 		updateParam("frequency", data.params.Frequency);
 		updateParam("amplitude", data.params.Amplitude);
@@ -136,6 +167,37 @@ function updateParam(id, value) {
 }
 
 function setSelectValue(id, value) {
+	// handle visual selectors (pattern, palette, colorMode)
+	if (id === "pattern" || id === "palette" || id === "colorMode") {
+		const container = document.getElementById(id + "-selector");
+		if (container) {
+			container.querySelectorAll(".option-btn").forEach((btn) => {
+				if (btn.dataset.value === value) {
+					btn.classList.add("active");
+				} else {
+					btn.classList.remove("active");
+				}
+			});
+		}
+		return;
+	}
+
+	// handle quality selector
+	if (id === "quality") {
+		const container = document.getElementById("quality-selector");
+		if (container) {
+			container.querySelectorAll(".option-btn").forEach((btn) => {
+				if (btn.dataset.value === value) {
+					btn.classList.add("active");
+				} else {
+					btn.classList.remove("active");
+				}
+			});
+		}
+		return;
+	}
+
+	// fallback to select
 	const select = document.getElementById(id);
 	if (select && select.value !== value) {
 		select.value = value;
@@ -144,12 +206,19 @@ function setSelectValue(id, value) {
 
 // setup controls
 function setupControls() {
-	// pattern, palette, colorMode
-	["pattern", "palette", "colorMode"].forEach((id) => {
-		document.getElementById(id).addEventListener("change", (e) => {
-			sendUpdate({ [id]: e.target.value });
+	// quality selector buttons
+	const qualitySelector = document.getElementById("quality-selector");
+	if (qualitySelector) {
+		qualitySelector.querySelectorAll(".option-btn").forEach((btn) => {
+			btn.addEventListener("click", () => {
+				qualitySelector.querySelectorAll(".option-btn").forEach((b) => {
+					b.classList.remove("active");
+				});
+				btn.classList.add("active");
+				sendUpdate({ quality: btn.dataset.value });
+			});
 		});
-	});
+	}
 
 	// colorOnAudio
 	document.getElementById("colorOnAudio").addEventListener("change", (e) => {
@@ -214,11 +283,23 @@ function setupControls() {
 	// buttons
 	document.getElementById("randomizeBtn").addEventListener("click", () => {
 		// trigger randomize via pattern change
-		const patterns = Array.from(document.getElementById("pattern").options).map(
-			(o) => o.value
-		);
-		const randomPattern = patterns[Math.floor(Math.random() * patterns.length)];
-		sendUpdate({ pattern: randomPattern });
+		const patternSelector = document.getElementById("pattern-selector");
+		if (patternSelector) {
+			const patterns = Array.from(
+				patternSelector.querySelectorAll(".option-btn")
+			).map((b) => b.dataset.value);
+			const randomPattern =
+				patterns[Math.floor(Math.random() * patterns.length)];
+			// update UI
+			patternSelector.querySelectorAll(".option-btn").forEach((btn) => {
+				if (btn.dataset.value === randomPattern) {
+					btn.classList.add("active");
+				} else {
+					btn.classList.remove("active");
+				}
+			});
+			sendUpdate({ pattern: randomPattern });
+		}
 	});
 
 	// save button
@@ -232,15 +313,24 @@ function saveConfig() {
 	btn.disabled = true;
 
 	// collect all current values
+	const getSelectedValue = (selectorId) => {
+		const container = document.getElementById(selectorId);
+		if (container) {
+			const active = container.querySelector(".option-btn.active");
+			if (active) return active.dataset.value;
+		}
+		return "";
+	};
+
 	const config = {
-		palette: document.getElementById("palette").value,
-		pattern: document.getElementById("pattern").value,
-		colorMode: document.getElementById("colorMode").value,
+		palette: getSelectedValue("palette-selector"),
+		pattern: getSelectedValue("pattern-selector"),
+		colorMode: getSelectedValue("colorMode-selector"),
 		colorOnAudio: document.getElementById("colorOnAudio").checked,
 		noiseFloor: parseFloat(document.getElementById("noiseFloor").value),
 		bufferSize: parseInt(document.getElementById("bufferSize").value),
 		targetFPS: parseFloat(document.getElementById("targetFPS").value),
-		quality: document.getElementById("quality").value,
+		quality: getSelectedValue("quality-selector"),
 		width: parseInt(document.getElementById("width").value),
 		height: parseInt(document.getElementById("height").value),
 		params: {},
@@ -327,7 +417,46 @@ function sendUpdate(updates) {
 		}
 	});
 
+	// collect config values if not in updates
+	const config = {};
+	if (!updates.noiseFloor) {
+		const nf = document.getElementById("noiseFloor");
+		if (nf) config.noiseFloor = parseFloat(nf.value);
+	}
+	if (!updates.bufferSize) {
+		const bs = document.getElementById("bufferSize");
+		if (bs) config.bufferSize = parseInt(bs.value);
+	}
+	if (!updates.targetFPS) {
+		const tfps = document.getElementById("targetFPS");
+		if (tfps) config.targetFPS = parseFloat(tfps.value);
+	}
+	if (!updates.quality) {
+		const q = document.getElementById("quality-selector");
+		if (q) {
+			const active = q.querySelector(".option-btn.active");
+			if (active) config.quality = active.dataset.value;
+		}
+	}
+	if (!updates.width) {
+		const w = document.getElementById("width");
+		if (w) config.width = parseInt(w.value);
+	}
+	if (!updates.height) {
+		const h = document.getElementById("height");
+		if (h) config.height = parseInt(h.value);
+	}
+	if (!updates.autoRandomize) {
+		const ar = document.getElementById("autoRandomize");
+		if (ar) config.autoRandomize = ar.checked;
+	}
+	if (!updates.randomInterval) {
+		const ri = document.getElementById("randomInterval");
+		if (ri) config.randomInterval = parseInt(ri.value);
+	}
+
 	const payload = {
+		...config,
 		...updates,
 		params: Object.keys(params).length > 0 ? params : undefined,
 	};

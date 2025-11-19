@@ -35,6 +35,12 @@ type AppInterface interface {
 	GetFeatures() analyzer.Features
 	GetFPS() float64
 	GetConfig() apppkg.ConfigGetter
+	SetNoiseFloor(float64)
+	SetBufferSize(int)
+	SetTargetFPS(float64)
+	SetDimensions(int, int)
+	SetAutoRandomize(bool)
+	SetRandomInterval(time.Duration)
 }
 
 type websocketClient struct {
@@ -45,9 +51,9 @@ type websocketClient struct {
 
 type StatusResponse struct {
 	FPS      float64            `json:"fps"`
-	Features analyzer.Features  `json:"features"`
-	Params   params.Parameters  `json:"params"`
+	Features analyzer.Features  `json:"features"` // only for display, not configurable
 	Renderer RendererStatus     `json:"renderer"`
+	Quality  string             `json:"quality,omitempty"`
 }
 
 type RendererStatus struct {
@@ -58,25 +64,35 @@ type RendererStatus struct {
 }
 
 type UpdateRequest struct {
-	Params   *params.Parameters `json:"params,omitempty"`
-	Palette  *string            `json:"palette,omitempty"`
-	Pattern  *string            `json:"pattern,omitempty"`
-	ColorMode *string           `json:"colorMode,omitempty"`
-	ColorOnAudio *bool          `json:"colorOnAudio,omitempty"`
+	Params      *params.Parameters `json:"params,omitempty"`
+	Palette     *string            `json:"palette,omitempty"`
+	Pattern     *string            `json:"pattern,omitempty"`
+	ColorMode   *string            `json:"colorMode,omitempty"`
+	ColorOnAudio *bool             `json:"colorOnAudio,omitempty"`
+	Quality     *string            `json:"quality,omitempty"`
+	NoiseFloor  *float64           `json:"noiseFloor,omitempty"`
+	BufferSize  *int               `json:"bufferSize,omitempty"`
+	TargetFPS   *float64           `json:"targetFPS,omitempty"`
+	Width       *int               `json:"width,omitempty"`
+	Height      *int               `json:"height,omitempty"`
+	AutoRandomize *bool            `json:"autoRandomize,omitempty"`
+	RandomInterval *int            `json:"randomInterval,omitempty"`
 }
 
 type SavedConfig struct {
-	Params       params.Parameters `json:"params"`
-	Palette      string            `json:"palette"`
-	Pattern      string            `json:"pattern"`
-	ColorMode    string            `json:"colorMode"`
-	ColorOnAudio bool              `json:"colorOnAudio"`
-	NoiseFloor   float64           `json:"noiseFloor"`
-	BufferSize   int               `json:"bufferSize"`
-	TargetFPS    float64           `json:"targetFPS"`
-	Quality      string            `json:"quality"`
-	Width        int               `json:"width"`
-	Height       int               `json:"height"`
+	Params         params.Parameters `json:"params"`
+	Palette        string            `json:"palette"`
+	Pattern        string            `json:"pattern"`
+	ColorMode      string            `json:"colorMode"`
+	ColorOnAudio   bool              `json:"colorOnAudio"`
+	NoiseFloor     float64           `json:"noiseFloor"`
+	BufferSize     int               `json:"bufferSize"`
+	TargetFPS      float64           `json:"targetFPS"`
+	Quality        string            `json:"quality"`
+	Width          int               `json:"width"`
+	Height         int               `json:"height"`
+	AutoRandomize  bool              `json:"autoRandomize"`
+	RandomInterval time.Duration     `json:"randomInterval"`
 }
 
 func NewServer(app AppInterface) *Server {
@@ -149,16 +165,17 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	defer s.mu.RUnlock()
 
 	renderer := s.app.GetRenderer()
+	cfg := s.app.GetConfig()
 	status := StatusResponse{
 		FPS:      s.lastFPS,
 		Features: s.lastFeatures,
-		Params:   s.lastParams,
 		Renderer: RendererStatus{
 			Palette:      renderer.PaletteName(),
 			Pattern:      renderer.PatternName(),
 			ColorMode:    renderer.ColorModeName(),
-			ColorOnAudio: true,
+			ColorOnAudio: renderer.ColorOnAudio(),
 		},
+		Quality: cfg.Quality(),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -180,8 +197,41 @@ func (s *Server) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// merge params if provided (partial update)
 	if req.Params != nil {
-		s.app.SetParams(*req.Params)
+		currentParams := s.app.GetParams()
+		// merge non-zero values from request into current params
+		if req.Params.Frequency > 0 {
+			currentParams.Frequency = req.Params.Frequency
+		}
+		if req.Params.Amplitude > 0 {
+			currentParams.Amplitude = req.Params.Amplitude
+		}
+		if req.Params.Speed > 0 {
+			currentParams.Speed = req.Params.Speed
+		}
+		if req.Params.Brightness > 0 {
+			currentParams.Brightness = req.Params.Brightness
+		}
+		if req.Params.Contrast > 0 {
+			currentParams.Contrast = req.Params.Contrast
+		}
+		if req.Params.Saturation > 0 {
+			currentParams.Saturation = req.Params.Saturation
+		}
+		if req.Params.BeatSensitivity > 0 {
+			currentParams.BeatSensitivity = req.Params.BeatSensitivity
+		}
+		if req.Params.BassInfluence > 0 {
+			currentParams.BassInfluence = req.Params.BassInfluence
+		}
+		if req.Params.MidInfluence > 0 {
+			currentParams.MidInfluence = req.Params.MidInfluence
+		}
+		if req.Params.TrebleInfluence > 0 {
+			currentParams.TrebleInfluence = req.Params.TrebleInfluence
+		}
+		s.app.SetParams(currentParams)
 	}
 
 	renderer := s.app.GetRenderer()
@@ -189,7 +239,7 @@ func (s *Server) handleUpdate(w http.ResponseWriter, r *http.Request) {
 		palette := renderer.PaletteName()
 		pattern := renderer.PatternName()
 		colorMode := renderer.ColorModeName()
-		colorOnAudio := true
+		colorOnAudio := renderer.ColorOnAudio()
 
 		if req.Palette != nil {
 			palette = *req.Palette
@@ -205,6 +255,37 @@ func (s *Server) handleUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 
 		renderer.Configure(palette, pattern, colorMode, colorOnAudio)
+	}
+
+	// update app config if provided
+	if req.Quality != nil {
+		s.app.GetRenderer().SetQuality(*req.Quality)
+	}
+	if req.NoiseFloor != nil {
+		s.app.SetNoiseFloor(*req.NoiseFloor)
+	}
+	if req.BufferSize != nil {
+		s.app.SetBufferSize(*req.BufferSize)
+	}
+	if req.TargetFPS != nil {
+		s.app.SetTargetFPS(*req.TargetFPS)
+	}
+	if req.Width != nil || req.Height != nil {
+		width := s.app.GetConfig().Width()
+		height := s.app.GetConfig().Height()
+		if req.Width != nil {
+			width = *req.Width
+		}
+		if req.Height != nil {
+			height = *req.Height
+		}
+		s.app.SetDimensions(width, height)
+	}
+	if req.AutoRandomize != nil {
+		s.app.SetAutoRandomize(*req.AutoRandomize)
+	}
+	if req.RandomInterval != nil {
+		s.app.SetRandomInterval(time.Duration(*req.RandomInterval) * time.Second)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -229,13 +310,15 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 		Palette:      renderer.PaletteName(),
 		Pattern:      renderer.PatternName(),
 		ColorMode:    renderer.ColorModeName(),
-		ColorOnAudio: true,
+		ColorOnAudio: renderer.ColorOnAudio(),
 		NoiseFloor:   cfg.NoiseFloor(),
 		BufferSize:   cfg.BufferSize(),
 		TargetFPS:    cfg.TargetFPS(),
-		Quality:      cfg.Quality(),
-		Width:        cfg.Width(),
-		Height:       cfg.Height(),
+		Quality:        cfg.Quality(),
+		Width:          cfg.Width(),
+		Height:         cfg.Height(),
+		AutoRandomize:  cfg.AutoRandomize(),
+		RandomInterval: cfg.RandomInterval(),
 	}
 
 	// override with values from request if provided
@@ -373,26 +456,29 @@ func (s *Server) broadcastLoop() {
 }
 
 func (s *Server) statusUpdateLoop() {
-	ticker := time.NewTicker(100 * time.Millisecond)
+	// reduced frequency to 500ms to save CPU/FPS
+	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 
 	for range ticker.C {
 		s.mu.Lock()
 		s.lastFeatures = s.app.GetFeatures()
 		s.lastFPS = s.app.GetFPS()
-		s.lastParams = s.app.GetParams()
+		renderer := s.app.GetRenderer()
+		currentRenderer := RendererStatus{
+			Palette:      renderer.PaletteName(),
+			Pattern:      renderer.PatternName(),
+			ColorMode:    renderer.ColorModeName(),
+			ColorOnAudio: renderer.ColorOnAudio(),
+		}
+		cfg := s.app.GetConfig()
 		s.mu.Unlock()
 
 		status := StatusResponse{
 			FPS:      s.lastFPS,
-			Features: s.lastFeatures,
-			Params:   s.lastParams,
-			Renderer: RendererStatus{
-				Palette:      s.app.GetRenderer().PaletteName(),
-				Pattern:      s.app.GetRenderer().PatternName(),
-				ColorMode:    s.app.GetRenderer().ColorModeName(),
-				ColorOnAudio: true,
-			},
+			Features: s.lastFeatures, // only for display stats
+			Renderer: currentRenderer,
+			Quality:  cfg.Quality(),
 		}
 
 		data, err := json.Marshal(status)
@@ -400,6 +486,7 @@ func (s *Server) statusUpdateLoop() {
 			select {
 			case s.broadcast <- data:
 			default:
+				// drop if channel full (non-blocking)
 			}
 		}
 	}

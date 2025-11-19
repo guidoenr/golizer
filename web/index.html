@@ -23,15 +23,15 @@
 					<h2>visuals</h2>
 					<div class="control-group">
 						<label>pattern</label>
-						<select id="pattern"></select>
+						<div id="pattern-selector" class="option-grid"></div>
 					</div>
 					<div class="control-group">
 						<label>palette</label>
-						<select id="palette"></select>
+						<div id="palette-selector" class="option-grid"></div>
 					</div>
 					<div class="control-group">
 						<label>color mode</label>
-						<select id="colorMode"></select>
+						<div id="colorMode-selector" class="option-grid"></div>
 					</div>
 					<div class="control-group">
 						<label>
@@ -91,11 +91,13 @@
 					</div>
 					<div class="control-group">
 						<label>quality</label>
-						<select id="quality">
-							<option value="eco">eco</option>
-							<option value="balanced" selected>balanced</option>
-							<option value="high">high</option>
-						</select>
+						<div id="quality-selector" class="option-grid">
+							<button class="option-btn" data-value="eco">eco</button>
+							<button class="option-btn active" data-value="balanced">
+								balanced
+							</button>
+							<button class="option-btn" data-value="high">high</button>
+						</div>
 					</div>
 					<div class="control-group">
 						<label>width</label>

@@ -283,6 +283,9 @@ func (r *Renderer) ColorModeName() string {
 func (r *Renderer) QualityName() string {
 	return string(r.quality)
 }
+func (r *Renderer) ColorOnAudio() bool {
+	return r.colorOnAudio
+}
 
 // SetQuality updates renderer quality preset.
 func (r *Renderer) SetQuality(name string) {
