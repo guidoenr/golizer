@@ -23,8 +23,8 @@ import (
 func main() {
 	var (
 		deviceName = flag.String("audio-device", "", "Optional PortAudio device name (substring match)")
-		width      = flag.Int("width", 80, "ASCII frame width")
-		height     = flag.Int("height", 24, "ASCII frame height")
+		width      = flag.Int("width", 96, "Frame width (ASCII columns or SDL resolution)")
+		height     = flag.Int("height", 30, "Frame height (ASCII rows or SDL resolution)")
 		targetFPS  = flag.Float64("fps", 1000, "Target frames per second")
 		bufferSize = flag.Int("buffer-size", 2048, "FFT buffer size (power of two recommended)")
 		noAudio    = flag.Bool("no-audio", false, "Run with synthetic audio (for testing)")

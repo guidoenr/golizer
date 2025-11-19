@@ -505,7 +505,7 @@ func (r *Renderer) buildFrameParams(p params.Parameters, time float64) framePara
 		zoom = lerp(1.0, zoom, 0.5)
 		detailWeight = 0
 		warpStrength = 0
-		swirlStrength *= 0.4
+		swirlStrength = 0
 	case qualityBalanced:
 		detailWeight *= 0.75
 		warpStrength *= 0.85
@@ -769,23 +769,19 @@ func (r *Renderer) precomputeDetailNoise(width, height int, xCoords, yCoords []f
 			rotX := baseX*ctx.cosRot - baseY*ctx.sinRot
 			rotY := baseX*ctx.sinRot + baseY*ctx.cosRot
 
-			radius := math.Hypot(rotX, rotY)
-			angle := math.Atan2(rotY, rotX)
+			distortedX := rotX
+			distortedY := rotY
+
 			if ctx.swirlStrength != 0 {
+				radius := math.Hypot(rotX, rotY)
+				angle := math.Atan2(rotY, rotX)
 				strength := ctx.swirlStrength
-				switch ctx.quality {
-				case qualityEco:
-					strength *= 0.55
-				case qualityBalanced:
-					strength *= 0.85
-				}
 				atten := math.Exp(-radius * 1.6)
 				angle += strength * atten * math.Sin(ctx.time*1.5+radius*2.3)
 				radius += strength * 0.12 * math.Sin(ctx.time*1.15+angle*1.4)
+				distortedX = radius * math.Cos(angle)
+				distortedY = radius * math.Sin(angle)
 			}
-
-			distortedX := radius * math.Cos(angle)
-			distortedY := radius * math.Sin(angle)
 
 			if ctx.warpStrength > 0 {
 				warpVal := 0.0
