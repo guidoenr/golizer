@@ -22,6 +22,9 @@ case "${ARCH}" in
     PLATFORM="pi"
     BINARY_NAME="golizer-pi"
     DEFAULT_BACKEND="${DEFAULT_BACKEND:-sdl}"
+    # Resolución más alta para Raspberry Pi (mejor en pantallas grandes)
+    DEFAULT_WIDTH="${DEFAULT_WIDTH:-800}"
+    DEFAULT_HEIGHT="${DEFAULT_HEIGHT:-600}"
     # Variables de entorno SDL para Raspberry Pi
     export SDL_VIDEO_CENTERED=1
     export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-x11}"
@@ -74,6 +77,11 @@ ARGS=(
     --quality "${QUALITY}"
     --scale "${SCALE}"
 )
+
+# Agregar resolución personalizada si está definida (para Raspberry Pi)
+if [[ -n "${DEFAULT_WIDTH:-}" && -n "${DEFAULT_HEIGHT:-}" ]]; then
+    ARGS+=(--width "${DEFAULT_WIDTH}" --height "${DEFAULT_HEIGHT}")
+fi
 
 # Agregar FPS solo si no es "auto"
 if [[ "${FPS}" != "auto" ]]; then

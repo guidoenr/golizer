@@ -40,6 +40,8 @@ func (r *Renderer) initSDL(width, height int) error {
 		sdl.SetHint(sdl.HINT_RENDER_SCALE_QUALITY, "0")
 		// Prevenir screen tearing
 		sdl.SetHint(sdl.HINT_RENDER_VSYNC, "1")
+		// Mantener aspect ratio al escalar (evita distorsión)
+		sdl.SetHint(sdl.HINT_RENDER_LOGICAL_SIZE_MODE, "1")
 	}
 	
 	if err := sdl.InitSubSystem(sdl.INIT_VIDEO); err != nil {
@@ -104,6 +106,10 @@ func (r *Renderer) ensureSDLResources() error {
 		}
 		state.renderer = renderer
 		_ = renderer.SetLogicalSize(logicalW, logicalH)
+		// En plataformas embebidas, configurar el scaling para mantener aspect ratio
+		if isEmbeddedPlatform() {
+			_ = renderer.SetIntegerScale(false) // Permitir scaling no-entero para mejor ajuste
+		}
 	}
 	if state.texture == nil || state.width != r.width || state.height != r.height {
 		if state.texture != nil {
