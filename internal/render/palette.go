@@ -1,14 +1,14 @@
 package render
 
 var (
-	defaultPalette = []rune("  .,:-;+=*%#@▓▒░█▚▞▛▜▙▟▘▝▗▖▞▚╱╲╳╋╬═║╔╗╚╝▤▥▧▨▩▦")
-	boxPalette     = []rune(" ░▒▓█▚▞▛▜▙▟")
-	linesPalette   = []rune(" `.-=+*/\\|╱╲╳╔╗╚╝═║╬")
-	sparkPalette   = []rune("  ´`^\"~:;*+×•¤°oO@#█")
-	retroPalette   = []rune("  .'`^\",:;-~+*=#%@")
-	minimalPalette = []rune(" .:-=+*#%@")
-	blockPalette   = []rune(" ▏▎▍▌▋▊▉█")
-	bubblePalette  = []rune("  .oO0@#%&")
+	defaultPalette = []rune("░▒▓█▓▒░░▒▓█▀▄█▌▐█▓▒░▀▄▀▄▀▄█▓▒░")
+	boxPalette     = []rune("░▒▓█▚▞▛▜▙▟▀▄▌▐")
+	linesPalette   = []rune("░▒│┃║█▐▌╱╲╳╋╬═▓▒")
+	sparkPalette   = []rune("░▒▓•◦○◉●◐◑◒◓◔◕⦿⦾█▓▒")
+	retroPalette   = []rune("░▒▓▀▄█▌▐▓▒░▀▄▀▄█")
+	minimalPalette = []rune("░▒▓█▓▒░")
+	blockPalette   = []rune("░▒▓█████▓▒░")
+	bubblePalette  = []rune("░▒○◐◑●◉⬤▓█")
 )
 
 // Palette returns characters used for brightness mapping.

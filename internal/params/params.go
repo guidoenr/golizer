@@ -54,10 +54,10 @@ func Defaults() Parameters {
 		Vignette:         0.25,
 		VignetteSoftness: 0.55,
 		GlyphSharpness:   1.0,
-		BeatSensitivity:  1.0,
-		BassInfluence:    0.6,
-		MidInfluence:     0.35,
-		TrebleInfluence:  0.25,
+		BeatSensitivity:  1.2,
+		BassInfluence:    0.9,
+		MidInfluence:     0.15,
+		TrebleInfluence:  0.08,
 		BeatDistortion:   0.8,
 		BeatZoom:         0.0,
 		DistortAmplitude: 0.4,
@@ -79,50 +79,61 @@ func (p *Parameters) ApplyFeatures(feat analyzer.Features, delta float64) {
 		return
 	}
 
-	energy := maxFloat(0.05, feat.Bass*0.1+feat.Mid*0.3+feat.Treble*0.6)
+	// Energía enfocada en bass (kicks/low end)
+	energy := maxFloat(0.05, feat.Bass*0.7+feat.Mid*0.2+feat.Treble*0.1)
 
-	bassMultiplier := 1.0 + feat.Bass*p.BassInfluence*0.8
-	p.Amplitude = lerp(p.Amplitude, bassMultiplier, 0.5)
-	p.NoiseStrength = feat.BeatStrength * (0.3 + feat.Treble*0.7)
-	p.DistortAmplitude = lerp(p.DistortAmplitude, 0.35+feat.Bass*0.6, 0.45)
-	p.NoiseScale = lerp(p.NoiseScale, 0.004+feat.Mid*0.003, 0.25)
+	// Amplitud reacciona principalmente al bass
+	bassMultiplier := 1.0 + feat.Bass*p.BassInfluence*1.2
+	p.Amplitude = lerp(p.Amplitude, bassMultiplier, 0.6)
+	
+	// Noise/distortion responde a beats, no tanto a treble
+	p.NoiseStrength = feat.BeatStrength * (0.4 + feat.Bass*0.6)
+	p.DistortAmplitude = lerp(p.DistortAmplitude, 0.35+feat.Bass*0.7, 0.5)
+	p.NoiseScale = lerp(p.NoiseScale, 0.004+feat.Bass*0.002, 0.2)
 
-	p.Frequency = lerp(p.Frequency, 8.0*(1.0+feat.Mid*p.MidInfluence*2.0), 0.5)
+	// Frecuencia sube suavemente con bass
+	p.Frequency = lerp(p.Frequency, 6.0*(1.0+feat.Bass*0.5+feat.Mid*p.MidInfluence), 0.4)
 
-	baseSpeed := 0.08 + energy*0.9
-	trebleBoost := 1.0 + feat.Treble*p.TrebleInfluence*2.5
+	// Velocidad más estable, enfocada en bass
+	baseSpeed := 0.08 + energy*0.7
+	trebleBoost := 1.0 + feat.Treble*p.TrebleInfluence
 	targetSpeed := baseSpeed * trebleBoost
-	p.Speed = lerp(p.Speed, targetSpeed, 0.55)
+	p.Speed = lerp(p.Speed, targetSpeed, 0.4)
 
-	p.ColorShift = math.Mod(p.ColorShift+feat.Treble*0.6, 2*math.Pi)
-	p.Gamma = lerp(p.Gamma, 0.9+feat.Mid*0.4, 0.35)
-	p.Vignette = lerp(p.Vignette, 0.25+feat.Treble*0.2, 0.25)
-	p.GlyphSharpness = lerp(p.GlyphSharpness, 0.9+feat.BeatStrength*0.4, 0.3)
+	// Color shift más suave
+	p.ColorShift = math.Mod(p.ColorShift+feat.Bass*0.3+feat.Treble*0.15, 2*math.Pi)
+	p.Gamma = lerp(p.Gamma, 0.9+feat.Bass*0.3, 0.3)
+	p.Vignette = lerp(p.Vignette, 0.25+feat.BeatStrength*0.15, 0.2)
+	p.GlyphSharpness = lerp(p.GlyphSharpness, 0.9+feat.BeatStrength*0.5, 0.35)
 
+	// Reacción a drops y kicks
 	if feat.IsDrop {
 		p.LastEffectTime = p.Time
-		p.BeatDistortion = 1.2
-		p.BeatZoom = 1.0
-		p.DistortAmplitude = 0.95
+		p.BeatDistortion = 1.5
+		p.BeatZoom = 1.2
+		p.DistortAmplitude = 1.0
 	} else {
-		threshold := 0.18 / maxFloat(0.1, p.BeatSensitivity)
+		threshold := 0.16 / maxFloat(0.1, p.BeatSensitivity)
 		if feat.BeatStrength > threshold {
 			p.LastEffectTime = p.Time
-			p.BeatDistortion = 0.85
-			p.BeatZoom = 0.7
+			p.BeatDistortion = 1.0
+			p.BeatZoom = 0.8
 		}
 	}
 
-	trebleBrightness := feat.Treble * 1.5
-	beatBoost := feat.BeatStrength * 0.4
-	p.Brightness = clamp(p.Brightness*0.6+0.4+feat.Overall+trebleBrightness+beatBoost, 0, 2.2)
+	// Brillo enfocado en bass y beats
+	bassBrightness := feat.Bass * 0.8
+	beatBoost := feat.BeatStrength * 0.5
+	p.Brightness = clamp(p.Brightness*0.6+0.5+feat.Overall*0.7+bassBrightness+beatBoost, 0, 2.2)
 
-	trebleContrast := feat.Treble * 0.8
-	p.Contrast = lerp(p.Contrast, 0.6+energy*0.6+trebleContrast, 0.5)
+	// Contraste responde principalmente a bass
+	bassContrast := feat.Bass * 0.6
+	p.Contrast = lerp(p.Contrast, 0.7+energy*0.5+bassContrast, 0.4)
 
-	bassSat := feat.Bass * 0.3
-	beatSat := feat.BeatStrength * 0.2
-	targetSat := clamp(0.7+bassSat+beatSat, 0.0, 1.5)
+	// Saturación con bass y beats
+	bassSat := feat.Bass * 0.5
+	beatSat := feat.BeatStrength * 0.3
+	targetSat := clamp(0.8+bassSat+beatSat, 0.0, 1.5)
 	if targetSat > p.Saturation {
 		p.Saturation = lerp(p.Saturation, targetSat, 0.7)
 	} else {
