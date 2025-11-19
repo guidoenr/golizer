@@ -33,15 +33,20 @@ if [[ "${SKIP_ARM64:-0}" -ne 1 ]]; then
   if [[ -n "${ARM_ENV[*]}" ]]; then
     set +e
     if [[ -n "${BUILD_TAGS}" ]]; then
-      env "${ARM_ENV[@]}" go build -tags "${BUILD_TAGS}" -o "${PI_OUTPUT}" ./cmd/visualizer
+      echo "    go build ${BUILD_TAGS} -> ${PI_OUTPUT}"
+      env "${ARM_ENV[@]}" go build -tags "${BUILD_TAGS}" -o "${PI_OUTPUT}" ./cmd/visualizer 2>&1 | tee build-pi.log
     else
-      env "${ARM_ENV[@]}" go build -o "${PI_OUTPUT}" ./cmd/visualizer
+      echo "    go build -> ${PI_OUTPUT}"
+      env "${ARM_ENV[@]}" go build -o "${PI_OUTPUT}" ./cmd/visualizer 2>&1 | tee build-pi.log
     fi
     STATUS=$?
     set -e
     if [[ ${STATUS} -ne 0 ]]; then
       echo "    Cross-compilation failed; set SKIP_ARM64=1 to skip this step."
+      echo "    See build-pi.log for details."
       rm -f "${PI_OUTPUT}"
+    else
+      echo "    Build succeeded. Log: build-pi.log"
     fi
   fi
 else

@@ -23,9 +23,11 @@ fi
 
 echo "==> Building golizer-debian"
 if [[ -n "${BUILD_TAGS}" ]]; then
-  go build -tags "${BUILD_TAGS}" -o "${DEBIAN_OUTPUT}" ./cmd/visualizer
+  echo "    go build ${BUILD_TAGS} -> ${DEBIAN_OUTPUT}"
+  go build -tags "${BUILD_TAGS}" -o "${DEBIAN_OUTPUT}" ./cmd/visualizer 2>&1 | tee build-debian.log
 else
-  go build -o "${DEBIAN_OUTPUT}" ./cmd/visualizer
+  echo "    go build -> ${DEBIAN_OUTPUT}"
+  go build -o "${DEBIAN_OUTPUT}" ./cmd/visualizer 2>&1 | tee build-debian.log
 fi
 
 popd >/dev/null
