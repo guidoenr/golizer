@@ -198,9 +198,9 @@ func (r *Renderer) Configure(paletteName, patternName, colorModeName string, col
 		r.patternName = key
 		r.detailMix = entry.detailMix
 	} else {
-		def := patternRegistry["pulse"]
+		def := patternRegistry["ripple"]
 		r.pattern = def.fn
-		r.patternName = "pulse"
+		r.patternName = "ripple"
 		r.detailMix = def.detailMix
 	}
 

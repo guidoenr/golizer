@@ -45,7 +45,7 @@ func Defaults() Parameters {
 		Speed:            0.05,
 		Scale:            1.0,
 		ColorShift:       0.0,
-		Pattern:          "pulse",
+		Pattern:          "ripple",
 		ColorMode:        "chromatic",
 		Brightness:       0.0,
 		Contrast:         0.8,

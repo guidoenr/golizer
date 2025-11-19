@@ -19,8 +19,8 @@ captures audio via portaudio, does fft analysis for bass/mid/treble, detects kic
 
 - **audio reactive**: responds to kicks, snares, and low-end frequencies (not that crazy high-end stuff)
 - **neon colors only**: red, cyan, blue, violet, pink. always saturated, never gray
-- **14 minimal patterns**: dots, flash, grid, spark, pulse, scatter, beam, ripple, strobe, particle, laser, waves, orbit, explosion
-- **optimized af**: 80-120 fps on raspberry pi 4, 300+ fps on desktop
+- **14 sparse patterns**: flash, spark, scatter, beam, ripple, strobe, laser, orbit, explosion, rings, zigzag, cross, spiral, star
+- **optimized af**: 60-90 fps on raspberry pi 4, 200+ fps on desktop
 - **auto-randomize**: patterns change every 10 seconds (configurable)
 - **quality presets**: eco/balanced/high - auto-detects your platform
 - **simple ascii**: fast characters (.,:;ox%#@) instead of slow unicode
@@ -96,22 +96,22 @@ the script auto-detects your architecture and builds the right binary:
 
 ## patterns explained
 
-all patterns react to bass/kicks, not treble (keeps it from going crazy):
+all patterns are **sparse** (only draw where there's action, rest is black) and react to bass/kicks:
 
-- **dots**: random dots that pop with the beat
-- **flash**: intense bursts from center
-- **grid**: minimal grid lines
-- **spark**: rays exploding outward
-- **pulse**: concentric rings
-- **scatter**: particles everywhere
-- **beam**: vertical light beams
-- **ripple**: water-like waves
-- **strobe**: on/off strobing
-- **particle**: moving particle system
-- **laser**: scanning laser lines
-- **waves**: diagonal waves
-- **orbit**: circular orbits
-- **explosion**: expanding from center
+- **flash**: intense center burst on beat
+- **spark**: rays exploding from center
+- **scatter**: random particles popping
+- **beam**: vertical scanning light beams
+- **ripple**: expanding ring edges (like water)
+- **strobe**: full on/off strobing
+- **laser**: thin scanning laser lines
+- **orbit**: circular orbit paths
+- **explosion**: expanding ring burst
+- **rings**: concentric pulsing rings
+- **zigzag**: lightning bolt effect
+- **cross**: rotating cross beams
+- **spiral**: rotating spiral arms
+- **star**: star burst rays
 
 ## palettes
 

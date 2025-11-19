@@ -162,7 +162,7 @@ func New(cfg Config) (*App, error) {
 		app.paletteOptions = []string{"default"}
 	}
 	if len(app.patternOptions) == 0 {
-		app.patternOptions = []string{"pulse"}
+		app.patternOptions = []string{"ripple"}
 	}
 	if len(app.colorOptions) == 0 {
 		app.colorOptions = []string{"chromatic"}
