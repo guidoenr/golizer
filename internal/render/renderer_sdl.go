@@ -4,6 +4,7 @@ package render
 
 import (
 	"fmt"
+	"math"
 	"unsafe"
 
 	"github.com/guidoenr/golizer/internal/analyzer"
@@ -52,24 +53,33 @@ func (r *Renderer) ensureSDLResources() error {
 		state.initialized = true
 	}
 	if state.window == nil {
+		flags := uint32(sdl.WINDOW_SHOWN)
+		if r.fullscreen {
+			flags = sdl.WINDOW_FULLSCREEN_DESKTOP
+		}
 		window, err := sdl.CreateWindow(
 			"golizer",
 			sdl.WINDOWPOS_CENTERED, sdl.WINDOWPOS_CENTERED,
 			int32(r.width), int32(r.height),
-			sdl.WINDOW_SHOWN,
+			flags,
 		)
 		if err != nil {
 			return err
 		}
 		state.window = window
+		if r.fullscreen {
+			_ = window.SetFullscreen(sdl.WINDOW_FULLSCREEN_DESKTOP)
+		}
 	}
+	logicalW := int32(r.width)
+	logicalH := int32(r.height)
 	if state.renderer == nil {
 		renderer, err := sdl.CreateRenderer(state.window, -1, sdl.RENDERER_ACCELERATED|sdl.RENDERER_PRESENTVSYNC)
 		if err != nil {
 			return err
 		}
 		state.renderer = renderer
-		_ = renderer.SetLogicalSize(int32(r.width), int32(r.height))
+		_ = renderer.SetLogicalSize(logicalW, logicalH)
 	}
 	if state.texture == nil || state.width != r.width || state.height != r.height {
 		if state.texture != nil {
@@ -191,6 +201,16 @@ func (r *Renderer) resizeSDL() {
 	if r.sdl == nil {
 		return
 	}
+	if !r.fullscreen {
+		scale := r.scale
+		if scale < 1 {
+			scale = 1
+		}
+		width := int32(math.Max(1, float64(r.width)*scale))
+		height := int32(math.Max(1, float64(r.height)*scale))
+		_ = r.sdl.window.SetSize(width, height)
+	}
+	_ = r.sdl.renderer.SetLogicalSize(int32(r.width), int32(r.height))
 	r.sdl.width = 0
 	r.sdl.height = 0
 }

@@ -42,6 +42,7 @@ func main() {
 		backend    = flag.String("backend", "auto", "Renderer backend (auto|ascii|sdl)")
 		stride     = flag.Int("stride", 1, "Render every Nth frame (1 = no skip)")
 		frameScale = flag.Float64("scale", 1.0, "Pixel scale multiplier (SDL)")
+		fullscreen = flag.Bool("fullscreen", false, "Use fullscreen SDL window")
 		profileLog = flag.String("profile-log", "", "Optional path to append frame timing metrics")
 		noiseFloor = flag.Float64("noise-floor", 0.08, "Energy gate to ignore ambient noise (0-0.5)")
 	)
@@ -180,7 +181,8 @@ func main() {
 		ProfileLog:     *profileLog,
 		Backend:        backendName,
 		FrameStride:    maxInt(1, *stride),
-		Scale:          clampFloat(*frameScale, 0.25, 2.0),
+		Scale:          clampFloat(*frameScale, 0.25, 4.0),
+		Fullscreen:     *fullscreen,
 		NoiseFloor:     clampFloat(*noiseFloor, 0.0, 0.5),
 		Log:            logger,
 	}

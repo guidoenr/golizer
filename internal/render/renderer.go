@@ -119,6 +119,7 @@ type Renderer struct {
 	sdl           *sdlState
 	scale         float64
 	downsample    int
+	fullscreen    bool
 }
 
 // Frame contains the rendered ASCII lines and optional status text.
@@ -171,6 +172,8 @@ func NewWithBackend(backend Backend, width, height int, paletteName, patternName
 		r.mode = backendASCII
 		r.useANSI = useANSI
 	}
+	r.scale = 1.0
+	r.downsample = 1
 
 	r.SetQuality(qualityName)
 	r.Configure(paletteName, patternName, colorModeName, colorOnAudio)
@@ -224,8 +227,18 @@ func (r *Renderer) SetScale(scale float64) {
 		} else {
 			r.downsample = 1
 		}
+		if r.sdl != nil {
+			r.resizeSDL()
+		}
 	} else {
 		r.downsample = 1
+	}
+}
+
+func (r *Renderer) SetFullscreen(enabled bool) {
+	r.fullscreen = enabled
+	if r.mode == backendSDL && r.sdl != nil {
+		r.applyFullscreen()
 	}
 }
 

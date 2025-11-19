@@ -39,6 +39,7 @@ type Config struct {
 	Backend        string
 	FrameStride    int
 	Scale          float64
+	Fullscreen     bool
 	NoiseFloor     float64
 	ProfileLog     string
 	Log            *log.Logger
@@ -83,6 +84,7 @@ type App struct {
 	frameStride    int
 	skipCounter    int
 	frameScale     float64
+	fullscreen     bool
 }
 
 // New constructs the application using the provided configuration.
@@ -146,6 +148,7 @@ func New(cfg Config) (*App, error) {
 	if app.windowMode {
 		app.cfg.ShowStatusBar = false
 		renderer.SetScale(app.frameScale)
+		renderer.SetFullscreen(app.fullscreen)
 	}
 	app.frameStride = cfg.FrameStride
 	if app.frameStride <= 0 {
