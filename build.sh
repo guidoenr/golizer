@@ -37,7 +37,6 @@ popd >/dev/null
 echo "==> Installing binary with high-priority wrapper (sudo may prompt)"
 "${SUDO_BIN}" install -d "${INSTALL_ROOT}"
 "${SUDO_BIN}" install -m 0755 "${REPO_ROOT}/golizer" "${INSTALL_ROOT}/golizer.bin"
-rm -f "${REPO_ROOT}/golizer"
 
 TEMP_WRAPPER="${REPO_ROOT}/.golizer_wrapper.tmp"
 cat > "${TEMP_WRAPPER}" <<'EOF'
