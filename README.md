@@ -1,6 +1,13 @@
 # golizer
+https://github.com/user-attachments/assets/d6cabc5b-8964-438b-991c-7e50564962c3
+> the setup showed in video is: Raspberry Pi4 Model B, with a Mic plugged in and a HDMI port to my TV
+
+> the raspberry is running the `golizer` binary and listening to a analog sound system
+
+
 
 real-time audio visualizer for the terminal. optimized for raspberry pi 4 and debian, runs smooth at 80+ fps with neon colors and minimal patterns.
+this exists because of [this](https://github.com/yuri-xyz/chroma/issues/14)
 
 ## what is this
 
