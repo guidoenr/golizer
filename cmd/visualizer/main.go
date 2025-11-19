@@ -264,11 +264,11 @@ func resolvePatternName(requested string, quality string) string {
 	if name == "" || name == "auto" {
 		switch quality {
 		case "eco":
-			return "bands"
+			return "dots"
 		case "balanced":
-			return "waves"
+			return "pulse"
 		default:
-			return "plasma"
+			return "pulse"
 		}
 	}
 	return name
