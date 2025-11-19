@@ -415,25 +415,81 @@ type pixelResult struct {
 }
 
 func (r *Renderer) evaluatePixel(vx, vy float64, p params.Parameters, ctx frameParams, feat analyzer.Features, activation float64, noiseWarp, noiseDetail []float64, idx int) pixelResult {
-	// simplified: no rotation/zoom/swirl/warp for speed
-	distortedX := vx
-	distortedY := vy
+	// apply zoom and rotation for organic movement
+	baseX := vx * ctx.zoom
+	baseY := vy * ctx.zoom
+
+	rotX := baseX*ctx.cosRot - baseY*ctx.sinRot
+	rotY := baseX*ctx.sinRot + baseY*ctx.cosRot
+
+	// apply swirl distortion for fluid organic feel
+	radius := math.Hypot(rotX, rotY)
+	angle := math.Atan2(rotY, rotX)
+	if ctx.swirlStrength != 0 {
+		strength := ctx.swirlStrength
+		switch ctx.quality {
+		case qualityEco:
+			strength *= 0.55
+		case qualityBalanced:
+			strength *= 0.85
+		}
+		atten := math.Exp(-radius * 1.6)
+		angle += strength * atten * math.Sin(ctx.time*1.5+radius*2.3)
+		radius += strength * 0.12 * math.Sin(ctx.time*1.15+angle*1.4)
+	}
+
+	distortedX := radius * math.Cos(angle)
+	distortedY := radius * math.Sin(angle)
+
+	// apply warp for subtle organic warping (on-demand, no precompute)
+	if ctx.warpStrength > 0 {
+		warp := fractalNoise((vx+ctx.time*0.15)/ctx.noiseScale, (vy-ctx.time*0.12)/ctx.noiseScale)
+		strength := ctx.warpStrength
+		switch ctx.quality {
+		case qualityEco:
+			strength *= 0.35
+		case qualityBalanced:
+			strength *= 0.7
+		}
+		distortedX += warp * strength
+		distortedY += warp * strength
+	}
 
 	patternValue := r.pattern(distortedX, distortedY, p, ctx.time)
 	combined := clampFloat(patternValue, -1.0, 1.0)
 
-	// simplified brightness (no gamma/contrast calc)
+	// gamma and contrast for better dynamic range
 	brightness := (combined*ctx.amplitude + 1.0) * 0.5
+	brightness = clamp01(brightness)
+	switch ctx.quality {
+	case qualityEco:
+		brightness = brightness * (0.7 + brightness*0.3)
+	default:
+		brightness = math.Pow(brightness, ctx.invGamma)
+		brightness = math.Pow(brightness, ctx.invContrast)
+	}
 	brightness = clamp01(brightness * ctx.brightnessScale)
 
 	if r.colorOnAudio {
 		brightness = clamp01(brightness * activation)
 	}
 
+	// vignette for depth
+	if ctx.vignette > 0 {
+		dist := math.Min(1.0, math.Hypot(vx, vy)*2.0)
+		vig := clamp01(1.0 - ctx.vignette*math.Pow(dist, 1.2))
+		brightness *= lerp(1.0, vig, 1.0-ctx.vignetteSoft)
+	}
+
 	brightness = clamp01(brightness)
 
-	// glyph value (no pow for speed)
-	glyphValue := brightness
+	// glyph sharpness for better contrast
+	var glyphValue float64
+	if ctx.quality == qualityEco {
+		glyphValue = brightness
+	} else {
+		glyphValue = math.Pow(brightness, ctx.glyphSharpness)
+	}
 	h, s, v := r.colorFromMode(combined, brightness, p, feat, activation)
 
 	return pixelResult{
@@ -464,26 +520,46 @@ type frameParams struct {
 }
 
 func (r *Renderer) buildFrameParams(p params.Parameters, time float64) frameParams {
-	// simplified: only essentials
+	// organic movement and distortion
+	zoom := 1.0 + p.BeatZoom*0.35*math.Sin(time*2.1)
+	sinRot, cosRot := math.Sincos(time * 0.2)
+	noiseScale := math.Max(0.001, p.NoiseScale*40.0)
+	warpStrength := p.NoiseStrength * 0.35
+	detailWeight := clampFloat(r.detailMix*p.NoiseStrength, 0.0, 1.0)
 	amplitude := clampFloat(p.Amplitude, 0.0, 3.0)
-	brightnessScale := clampFloat(p.Brightness, 0.0, 3.0)
+	invGamma := 1.0 / math.Max(0.1, p.Gamma)
+	invContrast := 1.0 / math.Max(0.2, p.Contrast)
+	vignetteSoft := clamp01(p.VignetteSoftness)
+	swirlStrength := p.DistortAmplitude * (0.5 + p.BeatDistortion*0.5)
+
+	switch r.quality {
+	case qualityEco:
+		zoom = lerp(1.0, zoom, 0.5)
+		detailWeight = 0
+		warpStrength = 0
+		swirlStrength = 0
+	case qualityBalanced:
+		detailWeight *= 0.85
+		warpStrength *= 0.9
+		swirlStrength *= 0.95
+	}
 
 	return frameParams{
 		time:            time,
-		zoom:            1.0,
-		sinRot:          0.0,
-		cosRot:          1.0,
-		noiseScale:      0.0,
-		warpStrength:    0.0,
-		detailWeight:    0.0,
+		zoom:            zoom,
+		sinRot:          sinRot,
+		cosRot:          cosRot,
+		noiseScale:      noiseScale,
+		warpStrength:    warpStrength,
+		detailWeight:    detailWeight,
 		amplitude:       amplitude,
-		invGamma:        1.0,
-		invContrast:     1.0,
-		brightnessScale: brightnessScale,
-		vignette:        0.0,
-		vignetteSoft:    0.0,
-		glyphSharpness:  1.0,
-		swirlStrength:   0.0,
+		invGamma:        invGamma,
+		invContrast:     invContrast,
+		brightnessScale: clampFloat(p.Brightness, 0.0, 3.0),
+		vignette:        clampFloat(p.Vignette, 0.0, 1.0),
+		vignetteSoft:    vignetteSoft,
+		glyphSharpness:  math.Max(0.2, p.GlyphSharpness),
+		swirlStrength:   swirlStrength,
 		quality:         r.quality,
 	}
 }
