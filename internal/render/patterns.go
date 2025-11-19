@@ -16,20 +16,20 @@ type patternEntry struct {
 }
 
 var patternRegistry = map[string]patternEntry{
-	"plasma":    {patternPlasma, 0.4},
-	"waves":     {patternWaves, 0.4},
-	"ripples":   {patternRipples, 0.4},
-	"nebula":    {patternNebula, 0.4},
-	"noise":     {patternNoise, 0.4},
-	"bands":     {patternBands, 0.0},
-	"strata":    {patternStrata, 0.1},
-	"orbits":    {patternOrbits, 0.15},
-	"tunnel":    {patternTunnel, 0.3},
-	"spiral":    {patternSpiral, 0.35},
-	"pulse":     {patternPulse, 0.2},
-	"vortex":    {patternVortex, 0.4},
-	"frequency": {patternFrequency, 0.1},
-	"mandala":   {patternMandala, 0.25},
+	"dots":      {patternDots, 0.0},
+	"flash":     {patternFlash, 0.0},
+	"grid":      {patternGrid, 0.0},
+	"spark":     {patternSpark, 0.1},
+	"pulse":     {patternPulse, 0.0},
+	"scatter":   {patternScatter, 0.0},
+	"beam":      {patternBeam, 0.0},
+	"ripple":    {patternRipple, 0.1},
+	"strobe":    {patternStrobe, 0.0},
+	"particle":  {patternParticle, 0.1},
+	"laser":     {patternLaser, 0.0},
+	"waves":     {patternWaves, 0.1},
+	"orbit":     {patternOrbit, 0.0},
+	"explosion": {patternExplosion, 0.1},
 }
 
 var noiseOctaves atomic.Int32
@@ -48,55 +48,146 @@ func PatternNames() []string {
 	return names
 }
 
-func patternPlasma(x, y float64, p params.Parameters, t float64) float64 {
-	v1 := math.Sin((x*3.4 + t*1.2) * 0.9)
-	v2 := math.Sin((y*4.1 - t*0.7) * 1.1)
-	v3 := math.Sin((x+y)*2.3 + t*1.7)
-	return (v1 + v2 + v3) / 3.0
+// Dots - puntos aleatorios que aparecen con el beat
+func patternDots(x, y float64, p params.Parameters, t float64) float64 {
+	cellX := math.Floor(x * 3.0)
+	cellY := math.Floor(y * 3.0)
+	noise := hash2(cellX, cellY)
+	timing := math.Sin((noise*6.28 + t*p.Frequency*0.5))
+	beat := p.BeatDistortion * 3.0
+	return math.Max(0, timing+beat-0.8) * 5.0
 }
 
-func patternWaves(x, y float64, p params.Parameters, t float64) float64 {
-	freq := p.Frequency * 0.6
-	v := math.Sin((x+t*0.8)*freq) * math.Cos((y-t*0.5)*freq*1.1)
-	return v
-}
-
-func patternRipples(x, y float64, p params.Parameters, t float64) float64 {
+// Flash - destellos intensos en el centro con el beat
+func patternFlash(x, y float64, p params.Parameters, t float64) float64 {
 	r := math.Hypot(x, y)
-	theta := math.Atan2(y, x)
-	return math.Sin(r*p.Frequency*1.6 - t*2.2 + math.Sin(theta*3+t)*0.5)
+	flash := 1.0 - r
+	beat := p.BeatDistortion * 2.0
+	pulse := math.Sin(t*p.Frequency*2.0) * 0.3
+	intensity := (flash + beat + pulse) * 2.0
+	return math.Max(0, intensity-1.0)
 }
 
-func patternNebula(x, y float64, p params.Parameters, t float64) float64 {
-	base := patternPlasma(x*0.8, y*0.8, p, t)
-	swirl := math.Sin((x-y)*1.5 + t*0.9)
-	noise := fractalNoise(x*1.2+t*0.1, y*1.2-t*0.15)
-	return (base*0.6 + swirl*0.2 + noise*0.6) / 1.0
+// Grid - grid minimal que aparece con el audio
+func patternGrid(x, y float64, p params.Parameters, t float64) float64 {
+	gridX := math.Abs(math.Sin(x*p.Frequency*0.8 + t*0.5))
+	gridY := math.Abs(math.Sin(y*p.Frequency*0.8 - t*0.3))
+	lines := math.Max(gridX, gridY)
+	beat := p.Amplitude * 0.8
+	return math.Pow(lines, 10.0) * (1.0 + beat)
 }
 
-func patternNoise(x, y float64, p params.Parameters, t float64) float64 {
-	scale := math.Max(0.001, p.NoiseScale*60.0)
-	return fractalNoise((x+p.ColorShift)*scale+t*0.2, (y-p.ColorShift)*scale-t*0.18)
+// Spark - chispas que explotan desde el centro
+func patternSpark(x, y float64, p params.Parameters, t float64) float64 {
+	r := math.Hypot(x, y)
+	angle := math.Atan2(y, x)
+	rays := math.Abs(math.Sin(angle*5.0 + t*2.0))
+	falloff := 1.0 / (1.0 + r*2.0)
+	beat := p.BeatDistortion * 1.5
+	return rays * falloff * (0.5 + beat)
 }
 
-func patternBands(x, y float64, p params.Parameters, t float64) float64 {
-	freq := math.Max(0.2, p.Frequency*0.35)
-	wave := math.Sin((y + t*0.5) * freq)
-	mod := math.Sin((x*0.5+t*0.18)*freq*0.8) * 0.6
-	return (wave + mod) * 0.7
+// Pulse - pulso concéntrico minimal
+func patternPulse(x, y float64, p params.Parameters, t float64) float64 {
+	r := math.Hypot(x, y)
+	ring := math.Abs(math.Sin((r-t)*p.Frequency*2.0))
+	beat := p.BeatDistortion * 2.0
+	return math.Pow(ring, 5.0) * (1.0 + beat)
 }
 
-func patternStrata(x, y float64, p params.Parameters, t float64) float64 {
-	layer := math.Sin((y*1.5 + t*0.35) * math.Max(1.2, p.Frequency*0.25))
-	cross := math.Sin((x*1.1-t*0.22)*1.8) * 0.4
-	return layer*0.8 + cross
+// Scatter - partículas dispersas
+func patternScatter(x, y float64, p params.Parameters, t float64) float64 {
+	cellX := math.Floor(x*5.0 + math.Sin(t)*2.0)
+	cellY := math.Floor(y*5.0 + math.Cos(t*0.8)*2.0)
+	noise := hash2(cellX, cellY)
+	threshold := 0.9 - p.Amplitude*0.3
+	if noise > threshold {
+		return (noise - threshold) * 10.0
+	}
+	return 0
 }
 
-func patternOrbits(x, y float64, p params.Parameters, t float64) float64 {
-	r2 := x*x + y*y
-	ring := math.Sin(r2*6.0 + t*0.8)
-	sweep := math.Sin((x + y + t*0.5) * math.Max(1.0, p.Frequency*0.2))
-	return (ring*0.7 + sweep*0.3)
+// Beam - rayos verticales que reaccionan al audio
+func patternBeam(x, y float64, p params.Parameters, t float64) float64 {
+	beamPos := math.Sin(t*p.Frequency*0.3) * 0.8
+	dist := math.Abs(x - beamPos)
+	beam := 1.0 / (1.0 + dist*10.0)
+	beat := p.Amplitude * 1.5
+	return math.Pow(beam, 3.0) * beat
+}
+
+// Ripple - ondas desde puntos aleatorios
+func patternRipple(x, y float64, p params.Parameters, t float64) float64 {
+	centers := []struct{ cx, cy float64 }{
+		{math.Sin(t * 0.3), math.Cos(t * 0.4)},
+		{math.Sin(t*0.5 + 1.0), math.Cos(t*0.6 - 1.0)},
+	}
+	value := 0.0
+	for _, c := range centers {
+		r := math.Hypot(x-c.cx, y-c.cy)
+		ripple := math.Sin(r*p.Frequency*3.0 - t*3.0)
+		value += ripple / (1.0 + r)
+	}
+	return value * p.Amplitude
+}
+
+// Strobe - efecto estroboscópico
+func patternStrobe(x, y float64, p params.Parameters, t float64) float64 {
+	strobe := math.Floor(math.Sin(t*p.Frequency*4.0+p.BeatDistortion*6.28) + 0.5)
+	r := math.Hypot(x, y)
+	vignette := 1.0 - r*0.5
+	return strobe * vignette
+}
+
+// Particle - sistema de partículas minimal
+func patternParticle(x, y float64, p params.Parameters, t float64) float64 {
+	particles := 0.0
+	for i := 0.0; i < 8.0; i++ {
+		angle := (i / 8.0) * 6.28 + t
+		speed := 0.3 + p.Amplitude*0.4
+		px := math.Sin(angle) * t * speed
+		py := math.Cos(angle) * t * speed
+		px = math.Mod(px+2.0, 4.0) - 2.0
+		py = math.Mod(py+2.0, 4.0) - 2.0
+		dist := math.Hypot(x-px, y-py)
+		particles += 1.0 / (1.0 + dist*20.0)
+	}
+	return particles * 2.0
+}
+
+// Laser - líneas laser que cruzan la pantalla
+func patternLaser(x, y float64, p params.Parameters, t float64) float64 {
+	angle := t * p.Frequency * 0.5
+	lineY := x*math.Sin(angle) + y*math.Cos(angle)
+	laser := 1.0 / (1.0 + math.Abs(lineY)*50.0)
+	beat := p.BeatDistortion * 2.0
+	return laser * (0.5 + beat)
+}
+
+// Waves - ondas minimalistas
+func patternWaves(x, y float64, p params.Parameters, t float64) float64 {
+	wave1 := math.Sin(x*p.Frequency*0.6 + t)
+	wave2 := math.Sin(y*p.Frequency*0.6 - t*0.7)
+	combined := (wave1 + wave2) * 0.5
+	return math.Pow(math.Abs(combined), 3.0) * p.Amplitude * 2.0
+}
+
+// Orbit - órbitas circulares minimal
+func patternOrbit(x, y float64, p params.Parameters, t float64) float64 {
+	r := math.Hypot(x, y)
+	angle := math.Atan2(y, x)
+	orbit := math.Sin(angle*3.0 - t*2.0 + r*2.0)
+	ring := 1.0 / (1.0 + math.Abs(r-0.5)*10.0)
+	return orbit * ring * p.Amplitude * 2.0
+}
+
+// Explosion - explosión desde el centro
+func patternExplosion(x, y float64, p params.Parameters, t float64) float64 {
+	r := math.Hypot(x, y)
+	explosion := math.Sin(r*p.Frequency*2.0 - t*3.0)
+	beat := p.BeatDistortion * 3.0
+	intensity := math.Exp(-r) * (0.3 + beat)
+	return explosion * intensity * 2.0
 }
 
 func fractalNoise(x, y float64) float64 {
@@ -145,7 +236,6 @@ func valueNoise2(x, y float64) float64 {
 func hash2(x, y float64) float64 {
 	xi := int64(x)
 	yi := int64(y)
-	// Combine coordinates using a variation of SplitMix64 for good distribution without trig.
 	n := uint64(xi)<<32 ^ uint64(uint32(yi))
 	n = (n ^ (n >> 33)) * 0xff51afd7ed558ccd
 	n = (n ^ (n >> 33)) * 0xc4ceb9fe1a85ec53
@@ -161,63 +251,6 @@ func lerpFloat(a, b, t float64) float64 {
 	return a*(1-t) + b*t
 }
 
-// Tunnel - efecto túnel hipnótico que responde al beat
-func patternTunnel(x, y float64, p params.Parameters, t float64) float64 {
-	r := math.Hypot(x, y)
-	depth := r - t*1.5
-	rings := math.Sin(depth * math.Max(3.0, p.Frequency*0.5))
-	theta := math.Atan2(y, x)
-	twist := math.Sin(theta*6.0 + depth*0.8) * 0.3
-	return rings + twist
-}
-
-// Spiral - espirales que giran con la música
-func patternSpiral(x, y float64, p params.Parameters, t float64) float64 {
-	r := math.Hypot(x, y)
-	theta := math.Atan2(y, x)
-	spiral := math.Sin(r*4.0 - theta*3.0 + t*1.2)
-	pulse := math.Sin(r*2.0 - t*0.8) * 0.4
-	return spiral*0.8 + pulse
-}
-
-// Pulse - pulsos concéntricos desde el centro
-func patternPulse(x, y float64, p params.Parameters, t float64) float64 {
-	r := math.Hypot(x, y)
-	beat := p.BeatDistortion * 3.0
-	pulse := math.Sin((r-t*1.5)*math.Max(4.0, p.Frequency*0.7) + beat)
-	fade := math.Exp(-r * 0.5)
-	return pulse * (0.6 + fade*0.4)
-}
-
-// Vortex - vórtice que se retuerce con el audio
-func patternVortex(x, y float64, p params.Parameters, t float64) float64 {
-	r := math.Hypot(x, y)
-	theta := math.Atan2(y, x)
-	twist := r * 2.0
-	rotation := theta*4.0 + twist - t*1.8
-	wave := math.Sin(rotation + p.BeatDistortion*2.0)
-	depth := math.Sin(r*3.0 - t) * 0.4
-	return wave*0.7 + depth
-}
-
-// Frequency - bandas verticales como un ecualizador
-func patternFrequency(x, y float64, p params.Parameters, t float64) float64 {
-	bands := math.Sin(x * math.Max(8.0, p.Frequency*1.2))
-	modulation := math.Sin((y + t*0.6) * 3.0) * 0.3
-	pulse := p.Amplitude * 0.5
-	return (bands + modulation + pulse) * 0.8
-}
-
-// Mandala - patrón simétrico tipo mandala
-func patternMandala(x, y float64, p params.Parameters, t float64) float64 {
-	r := math.Hypot(x, y)
-	theta := math.Atan2(y, x)
-	petals := math.Sin(theta*8.0 + t*0.7) * math.Cos(r*4.0 - t*0.5)
-	center := math.Sin(r*6.0 + theta*4.0 - t*1.2) * 0.5
-	radial := math.Cos(r*3.0 + t*0.4) * 0.3
-	return petals*0.6 + center + radial
-}
-
 func setNoiseProfile(mode qualityMode) {
 	switch mode {
 	case qualityEco:
@@ -225,6 +258,6 @@ func setNoiseProfile(mode qualityMode) {
 	case qualityBalanced:
 		noiseOctaves.Store(2)
 	default:
-		noiseOctaves.Store(3)
+		noiseOctaves.Store(4)
 	}
 }

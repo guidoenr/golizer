@@ -480,7 +480,7 @@ func (r *Renderer) evaluatePixel(vx, vy float64, p params.Parameters, ctx frameP
 	brightness = clamp01(brightness * ctx.brightnessScale)
 
 	if r.colorOnAudio {
-		brightness = clamp01(lerp(0.04, brightness, activation))
+		brightness = clamp01(lerp(0.0, brightness, activation))
 	}
 
 	if ctx.vignette > 0 {
@@ -592,9 +592,23 @@ func (r *Renderer) colorFromMode(base, brightness float64, p params.Parameters, 
 		s = 0.0
 		v = clamp01(brightness)
 	default:
-		h = clamp01(shift + baseNorm*0.35)
-		s = clamp01(0.35 + p.Saturation*0.5)
-		v = clamp01(brightness*0.9 + baseNorm*0.2)
+		// NEON colors only (rojo, rosa, violeta, azul, cyan, verde)
+		neonHues := []float64{
+			0.0,   // Rojo
+			0.33,  // Verde
+			0.5,   // Cyan
+			0.6,   // Azul
+			0.75,  // Violeta
+			0.85,  // Rosa/Magenta
+		}
+		hueIndex := shift + baseNorm*0.35
+		huePos := math.Mod(hueIndex*float64(len(neonHues)), float64(len(neonHues)))
+		idx := int(huePos)
+		nextIdx := (idx + 1) % len(neonHues)
+		frac := huePos - float64(idx)
+		h = neonHues[idx]*(1-frac) + neonHues[nextIdx]*frac
+		s = clamp01(0.85 + p.Saturation*0.15) // Saturación MUY alta (neon)
+		v = clamp01(brightness*0.95 + baseNorm*0.15)
 	}
 
 	if r.colorOnAudio {
