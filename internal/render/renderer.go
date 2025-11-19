@@ -321,15 +321,20 @@ func (r *Renderer) Render(p params.Parameters, feat analyzer.Features, fps float
 
 	lines := make([]string, r.height)
 
-	numWorkers := runtime.GOMAXPROCS(0)
-	if numWorkers > height {
-		numWorkers = height
-	}
+	// Reducir workers para menos overhead (mejor para Pi)
+	numWorkers := runtime.GOMAXPROCS(0) / 2
 	if numWorkers < 1 {
 		numWorkers = 1
 	}
+	if numWorkers > 4 {
+		numWorkers = 4
+	}
+	if numWorkers > height {
+		numWorkers = height
+	}
 
-	tileHeight := 4
+	// Aumentar tileHeight para menos sincronización
+	tileHeight := 8
 	if tileHeight > height {
 		tileHeight = height
 	}
@@ -411,90 +416,25 @@ type pixelResult struct {
 }
 
 func (r *Renderer) evaluatePixel(vx, vy float64, p params.Parameters, ctx frameParams, feat analyzer.Features, activation float64, noiseWarp, noiseDetail []float64, idx int) pixelResult {
-	baseX := vx * ctx.zoom
-	baseY := vy * ctx.zoom
-
-	rotX := baseX*ctx.cosRot - baseY*ctx.sinRot
-	rotY := baseX*ctx.sinRot + baseY*ctx.cosRot
-
-	radius := math.Hypot(rotX, rotY)
-	angle := math.Atan2(rotY, rotX)
-	if ctx.swirlStrength != 0 {
-		strength := ctx.swirlStrength
-		switch ctx.quality {
-		case qualityEco:
-			strength *= 0.55
-		case qualityBalanced:
-			strength *= 0.85
-		}
-		atten := math.Exp(-radius * 1.6)
-		angle += strength * atten * math.Sin(ctx.time*1.5+radius*2.3)
-		radius += strength * 0.12 * math.Sin(ctx.time*1.15+angle*1.4)
-	}
-
-	distortedX := radius * math.Cos(angle)
-	distortedY := radius * math.Sin(angle)
-
-	if ctx.warpStrength > 0 {
-		warp := 0.0
-		if noiseWarp != nil && idx >= 0 && idx < len(noiseWarp) {
-			warp = noiseWarp[idx]
-		} else {
-			warp = fractalNoise((vx+ctx.time*0.15)/ctx.noiseScale, (vy-ctx.time*0.12)/ctx.noiseScale)
-		}
-		strength := ctx.warpStrength
-		switch ctx.quality {
-		case qualityEco:
-			strength *= 0.35
-		case qualityBalanced:
-			strength *= 0.7
-		}
-		distortedX += warp * strength
-		distortedY += warp * strength
-	}
+	// Simplificado: sin rotación/zoom/swirl/warp para mejor performance
+	distortedX := vx
+	distortedY := vy
 
 	patternValue := r.pattern(distortedX, distortedY, p, ctx.time)
-	combined := patternValue
-	if ctx.detailWeight > 0 {
-		detail := 0.0
-		if noiseDetail != nil && idx >= 0 && idx < len(noiseDetail) {
-			detail = noiseDetail[idx]
-		} else {
-			detail = fractalNoise(distortedX*2+ctx.time*0.4, distortedY*2-ctx.time*0.3)
-		}
-		combined = patternValue*(1-ctx.detailWeight) + detail*ctx.detailWeight
-	}
-	combined = clampFloat(combined, -1.0, 1.0)
+	combined := clampFloat(patternValue, -1.0, 1.0)
 
+	// Brightness simplificado (sin gamma/contrast para performance)
 	brightness := (combined*ctx.amplitude + 1.0) * 0.5
-	brightness = clamp01(brightness)
-	switch ctx.quality {
-	case qualityEco:
-		brightness = brightness * (0.7 + brightness*0.3)
-	default:
-		brightness = math.Pow(brightness, ctx.invGamma)
-		brightness = math.Pow(brightness, ctx.invContrast)
-	}
 	brightness = clamp01(brightness * ctx.brightnessScale)
 
 	if r.colorOnAudio {
-		brightness = clamp01(lerp(0.0, brightness, activation))
-	}
-
-	if ctx.vignette > 0 {
-		dist := math.Min(1.0, math.Hypot(vx, vy)*2.0)
-		vig := clamp01(1.0 - ctx.vignette*math.Pow(dist, 1.2))
-		brightness *= lerp(1.0, vig, 1.0-ctx.vignetteSoft)
+		brightness = clamp01(brightness * activation)
 	}
 
 	brightness = clamp01(brightness)
 
-	var glyphValue float64
-	if ctx.quality == qualityEco {
-		glyphValue = brightness
-	} else {
-		glyphValue = math.Pow(brightness, ctx.glyphSharpness)
-	}
+	// Glyph simplificado (sin Pow para performance)
+	glyphValue := brightness
 	h, s, v := r.colorFromMode(combined, brightness, p, feat, activation)
 
 	return pixelResult{
@@ -525,45 +465,26 @@ type frameParams struct {
 }
 
 func (r *Renderer) buildFrameParams(p params.Parameters, time float64) frameParams {
-	zoom := 1.0 + p.BeatZoom*0.35*math.Sin(time*2.1)
-	sinRot, cosRot := math.Sincos(time * 0.2)
-	noiseScale := math.Max(0.001, p.NoiseScale*40.0)
-	warpStrength := p.NoiseStrength * 0.35
-	detailWeight := clampFloat(r.detailMix*p.NoiseStrength, 0.0, 1.0)
+	// Simplificado: solo lo esencial
 	amplitude := clampFloat(p.Amplitude, 0.0, 3.0)
-	invGamma := 1.0 / math.Max(0.1, p.Gamma)
-	invContrast := 1.0 / math.Max(0.2, p.Contrast)
-	vignetteSoft := clamp01(p.VignetteSoftness)
-	swirlStrength := p.DistortAmplitude * (0.5 + p.BeatDistortion*0.5)
-
-	switch r.quality {
-	case qualityEco:
-		zoom = lerp(1.0, zoom, 0.5)
-		detailWeight = 0
-		warpStrength = 0
-		swirlStrength = 0
-	case qualityBalanced:
-		detailWeight *= 0.85
-		warpStrength *= 0.9
-		swirlStrength *= 0.95
-	}
+	brightnessScale := clampFloat(p.Brightness, 0.0, 3.0)
 
 	return frameParams{
 		time:            time,
-		zoom:            zoom,
-		sinRot:          sinRot,
-		cosRot:          cosRot,
-		noiseScale:      noiseScale,
-		warpStrength:    warpStrength,
-		detailWeight:    detailWeight,
+		zoom:            1.0,
+		sinRot:          0.0,
+		cosRot:          1.0,
+		noiseScale:      0.0,
+		warpStrength:    0.0,
+		detailWeight:    0.0,
 		amplitude:       amplitude,
-		invGamma:        invGamma,
-		invContrast:     invContrast,
-		brightnessScale: clampFloat(p.Brightness, 0.0, 3.0),
-		vignette:        clampFloat(p.Vignette, 0.0, 1.0),
-		vignetteSoft:    vignetteSoft,
-		glyphSharpness:  math.Max(0.2, p.GlyphSharpness),
-		swirlStrength:   swirlStrength,
+		invGamma:        1.0,
+		invContrast:     1.0,
+		brightnessScale: brightnessScale,
+		vignette:        0.0,
+		vignetteSoft:    0.0,
+		glyphSharpness:  1.0,
+		swirlStrength:   0.0,
 		quality:         r.quality,
 	}
 }
@@ -607,10 +528,12 @@ func (r *Renderer) colorFromMode(base, brightness float64, p params.Parameters, 
 		if feat.IsDrop {
 			activation = clamp01(activation + 0.2)
 		}
-		s = clamp01(s * activation)
-		v = clamp01(0.05 + v*activation)
-		if activation < 0.08 {
-			s = 0
+		// SIEMPRE mantener saturación alta (neon), solo ajustar brightness
+		s = clamp01(0.75 + activation*0.25) // Mínimo 75% saturación
+		v = clamp01(v * activation)
+		// Si no hay audio, mantener un mínimo de brightness para ver el color
+		if v < 0.01 {
+			v = 0.0 // Negro total
 		}
 	}
 
@@ -632,22 +555,21 @@ func hsvToANSI(h, s, v float64) int {
 }
 
 func hsvToRGB(h, s, v float64) (float64, float64, float64) {
-	h = clamp01(h)
-	s = clamp01(s)
-	v = clamp01(v)
-
-	if s == 0 {
+	// HSV a RGB simplificado (sin switch, más rápido)
+	if s <= 0.0 {
 		return v, v, v
 	}
 
-	hv := h * 6.0
-	i := math.Floor(hv)
-	f := hv - i
+	h = h - math.Floor(h) // Mantener en [0, 1)
+	hh := h * 6.0
+	i := int(hh)
+	f := hh - float64(i)
 	p := v * (1.0 - s)
 	q := v * (1.0 - s*f)
 	t := v * (1.0 - s*(1.0-f))
 
-	switch int(i) % 6 {
+	// Tabla directa sin switch
+	switch i {
 	case 0:
 		return v, t, p
 	case 1:
@@ -664,19 +586,14 @@ func hsvToRGB(h, s, v float64) (float64, float64, float64) {
 }
 
 func rgbToANSI(r, g, b float64) int {
+	// Simplificado: sin grayscale, directo a color cube 6x6x6
 	r = clamp01(r)
 	g = clamp01(g)
 	b = clamp01(b)
 
-	// Grayscale palette for low saturation/contrast
-	if math.Abs(r-g) < 0.02 && math.Abs(g-b) < 0.02 {
-		gray := int(clampFloat(math.Round(r*23), 0, 23))
-		return 232 + gray
-	}
-
-	ri := int(clampFloat(r*5+0.5, 0, 5))
-	gi := int(clampFloat(g*5+0.5, 0, 5))
-	bi := int(clampFloat(b*5+0.5, 0, 5))
+	ri := int(r * 5.999)
+	gi := int(g * 5.999)
+	bi := int(b * 5.999)
 
 	return 16 + 36*ri + 6*gi + bi
 }
