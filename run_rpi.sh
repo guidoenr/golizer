@@ -33,11 +33,11 @@ fi
 
 # Directorio del script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GOLIZER_BIN="${SCRIPT_DIR}/golizer"
+GOLIZER_BIN="${SCRIPT_DIR}/golizer-pi"
 
 if [[ ! -x "${GOLIZER_BIN}" ]]; then
-    echo "Error: golizer binary not found at ${GOLIZER_BIN}"
-    echo "Run ./build.sh first"
+    echo "Error: golizer-pi binary not found at ${GOLIZER_BIN}"
+    echo "Run ./build.sh first and copy golizer-pi to Raspberry Pi"
     exit 1
 fi
 
