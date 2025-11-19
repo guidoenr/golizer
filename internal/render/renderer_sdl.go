@@ -38,8 +38,8 @@ func (r *Renderer) initSDL(width, height int) error {
 		sdl.SetHint(sdl.HINT_RENDER_DRIVER, "opengles2")
 		// Mejorar el scaling en fullscreen
 		sdl.SetHint(sdl.HINT_RENDER_SCALE_QUALITY, "0")
-		// Prevenir screen tearing
-		sdl.SetHint(sdl.HINT_RENDER_VSYNC, "1")
+		// NO forzar VSYNC en Pi - causa lag masivo (237ms de present!)
+		sdl.SetHint(sdl.HINT_RENDER_VSYNC, "0")
 		// Mantener aspect ratio al escalar (evita distorsión)
 		sdl.SetHint(sdl.HINT_RENDER_LOGICAL_SIZE_MODE, "1")
 	}
@@ -100,7 +100,13 @@ func (r *Renderer) ensureSDLResources() error {
 	logicalW := int32(r.width)
 	logicalH := int32(r.height)
 	if state.renderer == nil {
-		renderer, err := sdl.CreateRenderer(state.window, -1, sdl.RENDERER_ACCELERATED|sdl.RENDERER_PRESENTVSYNC)
+		// En plataformas embebidas, intentar sin VSYNC primero para mejor performance
+		rendererFlags := uint32(sdl.RENDERER_ACCELERATED)
+		if !isEmbeddedPlatform() {
+			rendererFlags |= sdl.RENDERER_PRESENTVSYNC
+		}
+		
+		renderer, err := sdl.CreateRenderer(state.window, -1, rendererFlags)
 		if err != nil {
 			return err
 		}
