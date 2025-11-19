@@ -310,12 +310,10 @@ func (r *Renderer) Render(p params.Parameters, feat analyzer.Features, fps float
 		noiseWarp   []float64
 		noiseDetail []float64
 	)
-	if frameCtx.warpStrength > 0 && frameCtx.noiseScale > 0 {
-		noiseWarp = r.precomputeWarpNoise(width, height, xCoords, yCoords, scale, frameCtx)
-	}
-	if frameCtx.detailWeight > 0 {
-		noiseDetail = r.precomputeDetailNoise(width, height, xCoords, yCoords, scale, frameCtx, noiseWarp)
-	}
+	// Desactivar precálculo de noise para mejor performance
+	// El noise se calculará on-demand solo si es necesario
+	noiseWarp = nil
+	noiseDetail = nil
 
 	if r.mode == backendSDL {
 		return r.renderSDL(p, feat, fps, frameCtx, activation, xCoords, yCoords, scale, noiseWarp, noiseDetail)
@@ -592,21 +590,15 @@ func (r *Renderer) colorFromMode(base, brightness float64, p params.Parameters, 
 		s = 0.0
 		v = clamp01(brightness)
 	default:
-		// NEON colors only (rojo, rosa, violeta, azul, cyan, verde)
-		neonHues := []float64{
-			0.0,   // Rojo
-			0.33,  // Verde
-			0.5,   // Cyan
-			0.6,   // Azul
-			0.75,  // Violeta
-			0.85,  // Rosa/Magenta
+		// NEON colors - versión optimizada sin arrays
+		hueBase := math.Mod(shift + baseNorm*0.35, 1.0)
+		// Mapear a colores neon: rojo, cyan, azul, violeta, rosa
+		h = hueBase
+		if hueBase < 0.5 {
+			h = hueBase * 0.6 // 0-0.3 (rojo a cyan)
+		} else {
+			h = 0.5 + (hueBase-0.5)*0.7 // 0.5-0.85 (cyan a rosa)
 		}
-		hueIndex := shift + baseNorm*0.35
-		huePos := math.Mod(hueIndex*float64(len(neonHues)), float64(len(neonHues)))
-		idx := int(huePos)
-		nextIdx := (idx + 1) % len(neonHues)
-		frac := huePos - float64(idx)
-		h = neonHues[idx]*(1-frac) + neonHues[nextIdx]*frac
 		s = clamp01(0.85 + p.Saturation*0.15) // Saturación MUY alta (neon)
 		v = clamp01(brightness*0.95 + baseNorm*0.15)
 	}
