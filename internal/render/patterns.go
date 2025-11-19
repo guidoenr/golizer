@@ -118,17 +118,12 @@ func patternBeam(x, y float64, p params.Parameters, t float64) float64 {
 
 // Ripple - ondas desde puntos aleatorios
 func patternRipple(x, y float64, p params.Parameters, t float64) float64 {
-	centers := []struct{ cx, cy float64 }{
-		{math.Sin(t * 0.3), math.Cos(t * 0.4)},
-		{math.Sin(t*0.5 + 1.0), math.Cos(t*0.6 - 1.0)},
-	}
-	value := 0.0
-	for _, c := range centers {
-		r := math.Hypot(x-c.cx, y-c.cy)
-		ripple := math.Sin(r*p.Frequency*3.0 - t*3.0)
-		value += ripple / (1.0 + r)
-	}
-	return value * p.Amplitude
+	// Solo 1 centro para mejor performance
+	cx := math.Sin(t * 0.3)
+	cy := math.Cos(t * 0.4)
+	r := math.Hypot(x-cx, y-cy)
+	ripple := math.Sin(r*p.Frequency*3.0 - t*3.0)
+	return ripple * p.Amplitude / (1.0 + r)
 }
 
 // Strobe - efecto estroboscópico
@@ -142,9 +137,10 @@ func patternStrobe(x, y float64, p params.Parameters, t float64) float64 {
 // Particle - sistema de partículas minimal
 func patternParticle(x, y float64, p params.Parameters, t float64) float64 {
 	particles := 0.0
-	for i := 0.0; i < 8.0; i++ {
-		angle := (i / 8.0) * 6.28 + t
-		speed := 0.3 + p.Amplitude*0.4
+	speed := 0.3 + p.Amplitude*0.4
+	// Solo 4 partículas en vez de 8 (mejor performance)
+	for i := 0.0; i < 4.0; i++ {
+		angle := (i / 4.0) * 6.28 + t
 		px := math.Sin(angle) * t * speed
 		py := math.Cos(angle) * t * speed
 		px = math.Mod(px+2.0, 4.0) - 2.0

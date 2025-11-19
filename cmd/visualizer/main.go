@@ -36,7 +36,7 @@ func main() {
 		listDevs   = flag.Bool("list-audio-devices", false, "List available audio input devices and exit")
 		colorBurst = flag.Bool("color-on-audio", true, "Fade from monochrome to color based on audio energy")
 		noColor    = flag.Bool("no-color", false, "Disable ANSI color output")
-		quality    = flag.String("quality", "high", "Quality preset (auto|high|balanced|eco)")
+		quality    = flag.String("quality", "balanced", "Quality preset (auto|high|balanced|eco)")
 		autoRandom = flag.Bool("auto-randomize", true, "Automatically randomize visuals periodically")
 		randomFreq = flag.Duration("randomize-interval", 10*time.Second, "Interval between automatic visual randomization")
 		backend    = flag.String("backend", "ascii", "Renderer backend (auto|ascii|sdl)")
@@ -190,6 +190,9 @@ func main() {
 	if appConfig.Quality == "eco" && !flagIsPassed("fps") && appConfig.TargetFPS > 48 {
 		appConfig.TargetFPS = 48
 	}
+	if appConfig.Quality == "balanced" && !flagIsPassed("fps") && appConfig.TargetFPS > 90 {
+		appConfig.TargetFPS = 90
+	}
 
 	a, err := app.New(appConfig)
 	if err != nil {
@@ -279,7 +282,7 @@ func defaultFPSForQuality(quality string) float64 {
 	case "eco":
 		return 48
 	case "balanced":
-		return 180
+		return 90
 	default:
 		return 1000
 	}
