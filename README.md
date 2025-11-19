@@ -1,6 +1,7 @@
 # golizer
 
 real-time audio visualizer for the terminal. optimized for raspberry pi 4 and debian, runs smooth at 80+ fps with neon colors and minimal patterns.
+this exists because of [this](https://github.com/yuri-xyz/chroma/issues/14)
 
 ## what is this
 
