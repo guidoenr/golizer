@@ -55,9 +55,9 @@ func Defaults() Parameters {
 		VignetteSoftness: 0.55,
 		GlyphSharpness:   1.0,
 		BeatSensitivity:  1.2,
-		BassInfluence:    0.9,
-		MidInfluence:     0.15,
-		TrebleInfluence:  0.08,
+		BassInfluence:    0.85,
+		MidInfluence:     0.25,
+		TrebleInfluence:  0.15,
 		BeatDistortion:   0.0,
 		BeatZoom:         0.0,
 		DistortAmplitude: 0.0,
@@ -79,8 +79,8 @@ func (p *Parameters) ApplyFeatures(feat analyzer.Features, delta float64) {
 		return
 	}
 
-	// Energía enfocada en bass (kicks/low end)
-	energy := maxFloat(0.05, feat.Bass*0.7+feat.Mid*0.2+feat.Treble*0.1)
+	// energy focused on bass but also responds to mids/highs
+	energy := maxFloat(0.05, feat.Bass*0.65+feat.Mid*0.25+feat.Treble*0.15)
 
 	// Amplitud reacciona principalmente al bass - RÁPIDO
 	bassMultiplier := 1.0 + feat.Bass*p.BassInfluence*1.5

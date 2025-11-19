@@ -19,7 +19,7 @@ captures audio via portaudio, does fft analysis for bass/mid/treble, detects kic
 
 - **audio reactive**: responds to kicks, snares, and low-end frequencies (not that crazy high-end stuff)
 - **neon colors only**: red, cyan, blue, violet, pink. always saturated, never gray
-- **14 sparse patterns**: flash, spark, scatter, beam, ripple, strobe, laser, orbit, explosion, rings, zigzag, cross, spiral, star
+- **16 sparse patterns**: flash, spark, scatter, beam, ripple, laser, orbit, explosion, rings, zigzag, cross, spiral, star, tunnel, neurons, fractal
 - **optimized af**: 60-90 fps on raspberry pi 4, 200+ fps on desktop
 - **auto-randomize**: patterns change every 10 seconds (configurable)
 - **quality presets**: eco/balanced/high - auto-detects your platform
@@ -70,7 +70,7 @@ the script auto-detects your architecture and builds the right binary:
 --quality balanced             # auto|high|balanced|eco
 --backend ascii                # ascii|sdl
 --palette auto                 # auto|default|box|lines|spark|retro|minimal|block|bubble
---pattern auto                 # auto|flash|spark|scatter|beam|ripple|strobe|laser|orbit|explosion|rings|zigzag|cross|spiral|star
+--pattern auto                 # auto|flash|spark|scatter|beam|ripple|laser|orbit|explosion|rings|zigzag|cross|spiral|star|tunnel|neurons|fractal
 --color-mode chromatic         # chromatic|fire|aurora|mono
 --color-on-audio               # fade from black to neon based on audio
 
@@ -96,14 +96,13 @@ the script auto-detects your architecture and builds the right binary:
 
 ## patterns explained
 
-all patterns are **sparse** (only draw where there's action, rest is black) and react to bass/kicks:
+all patterns are **sparse** (only draw where there's action, rest is black) and react to bass/kicks with some mid/high response:
 
 - **flash**: intense center burst on beat
 - **spark**: rays exploding from center
 - **scatter**: random particles popping
 - **beam**: vertical scanning light beams
 - **ripple**: expanding ring edges (like water)
-- **strobe**: full on/off strobing
 - **laser**: thin scanning laser lines
 - **orbit**: circular orbit paths
 - **explosion**: expanding ring burst
@@ -112,6 +111,9 @@ all patterns are **sparse** (only draw where there's action, rest is black) and 
 - **cross**: rotating cross beams
 - **spiral**: rotating spiral arms
 - **star**: star burst rays
+- **tunnel**: 3d tunnel perspective
+- **neurons**: neural network connections
+- **fractal**: fractal branch patterns
 
 ## palettes
 

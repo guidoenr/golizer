@@ -31,7 +31,7 @@ func main() {
 		debug      = flag.Bool("debug", false, "Enable verbose logging")
 		showStatus = flag.Bool("status", true, "Display status bar")
 		palette    = flag.String("palette", "auto", "ASCII palette (auto|default|box|lines|spark|retro|minimal|block|bubble)")
-		pattern    = flag.String("pattern", "auto", "Visual pattern (auto|flash|spark|scatter|beam|ripple|strobe|laser|orbit|explosion|rings|zigzag|cross|spiral|star)")
+		pattern    = flag.String("pattern", "auto", "Visual pattern (auto|flash|spark|scatter|beam|ripple|laser|orbit|explosion|rings|zigzag|cross|spiral|star|tunnel|neurons|fractal)")
 		colorMode  = flag.String("color-mode", "chromatic", "Color mode (chromatic|fire|aurora|mono)")
 		listDevs   = flag.Bool("list-audio-devices", false, "List available audio input devices and exit")
 		colorBurst = flag.Bool("color-on-audio", true, "Fade from monochrome to color based on audio energy")

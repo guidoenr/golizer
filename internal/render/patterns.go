@@ -21,7 +21,6 @@ var patternRegistry = map[string]patternEntry{
 	"scatter":   {patternScatter, 0.0},
 	"beam":      {patternBeam, 0.0},
 	"ripple":    {patternRipple, 0.1},
-	"strobe":    {patternStrobe, 0.0},
 	"laser":     {patternLaser, 0.0},
 	"orbit":     {patternOrbit, 0.0},
 	"explosion": {patternExplosion, 0.1},
@@ -30,6 +29,9 @@ var patternRegistry = map[string]patternEntry{
 	"cross":     {patternCross, 0.0},
 	"spiral":    {patternSpiral, 0.1},
 	"star":      {patternStar, 0.0},
+	"tunnel":    {patternTunnel, 0.1},
+	"neurons":   {patternNeurons, 0.0},
+	"fractal":   {patternFractal, 0.1},
 }
 
 var noiseOctaves atomic.Int32
@@ -116,15 +118,80 @@ func patternRipple(x, y float64, p params.Parameters, t float64) float64 {
 	return -1.0
 }
 
-// stroboscopic effect (sparse - full on or full off)
-func patternStrobe(x, y float64, p params.Parameters, t float64) float64 {
-	phase := t*4.0 + p.BeatDistortion*2.0
-	strobe := phase - math.Floor(phase)
-	if strobe > 0.5 {
-		r := x*x + y*y
-		if r < 1.0 {
-			return (1.0 - r) * 2.0
+// NEW: tunnel perspective effect (sparse - only the tunnel edges)
+func patternTunnel(x, y float64, p params.Parameters, t float64) float64 {
+	r := math.Sqrt(x*x + y*y)
+	if r < 0.1 {
+		return -1.0
+	}
+	angle := math.Atan2(y, x)
+	depth := 1.0/r - t*2.0
+	tunnel := depth - math.Floor(depth)
+	
+	// draw tunnel rings
+	if tunnel < 0.1 {
+		angleSnap := math.Floor(angle * 8.0 / (2.0 * math.Pi))
+		if math.Mod(angleSnap, 2.0) < 1.0 {
+			return tunnel * 10.0 * (0.5 + p.BeatDistortion)
 		}
+	}
+	return -1.0
+}
+
+// NEW: neural network connections (sparse - dots and connecting lines)
+func patternNeurons(x, y float64, p params.Parameters, t float64) float64 {
+	// create nodes
+	nodes := []struct{ nx, ny float64 }{
+		{math.Sin(t * 0.3), math.Cos(t * 0.4)},
+		{math.Sin(t*0.5 + 2.0), math.Cos(t*0.3 - 1.0)},
+		{math.Sin(t*0.4 - 1.5), math.Cos(t*0.6 + 0.5)},
+	}
+	
+	// check if near any node
+	for _, node := range nodes {
+		dist := math.Sqrt((x-node.nx)*(x-node.nx) + (y-node.ny)*(y-node.ny))
+		if dist < 0.12 {
+			return (0.12 - dist) * 8.0 * p.Amplitude
+		}
+	}
+	
+	// check if on connection line
+	for i := 0; i < len(nodes); i++ {
+		for j := i + 1; j < len(nodes); j++ {
+			n1, n2 := nodes[i], nodes[j]
+			// distance from point to line segment
+			dx := n2.nx - n1.nx
+			dy := n2.ny - n1.ny
+			t_line := ((x-n1.nx)*dx + (y-n1.ny)*dy) / (dx*dx + dy*dy)
+			if t_line >= 0 && t_line <= 1 {
+				px := n1.nx + t_line*dx
+				py := n1.ny + t_line*dy
+				dist := math.Sqrt((x-px)*(x-px) + (y-py)*(y-py))
+				if dist < 0.03 {
+					return (0.03 - dist) * 15.0 * p.BeatDistortion * 2.0
+				}
+			}
+		}
+	}
+	return -1.0
+}
+
+// NEW: fractal branches (sparse - only the fractal edges)
+func patternFractal(x, y float64, p params.Parameters, t float64) float64 {
+	angle := math.Atan2(y, x)
+	r := math.Sqrt(x*x + y*y)
+	
+	// create fractal branches
+	branches := 5.0
+	branchAngle := math.Mod(angle*branches + t, 2.0*math.Pi)
+	if branchAngle > math.Pi {
+		branchAngle = 2.0*math.Pi - branchAngle
+	}
+	
+	// fractal scaling
+	scale := math.Sin(r*4.0 - t*2.0)
+	if branchAngle < 0.2 && scale > 0.5 && r < 1.2 {
+		return (0.2 - branchAngle) * 15.0 * (scale - 0.5) * (0.5 + p.Amplitude)
 	}
 	return -1.0
 }
