@@ -48,7 +48,7 @@ func PatternNames() []string {
 	return names
 }
 
-// Dots - puntos aleatorios que aparecen con el beat
+// random dots that pop up with the beat
 func patternDots(x, y float64, p params.Parameters, t float64) float64 {
 	cellX := math.Floor(x * 3.0)
 	cellY := math.Floor(y * 3.0)
@@ -60,9 +60,9 @@ func patternDots(x, y float64, p params.Parameters, t float64) float64 {
 	return 0
 }
 
-// Flash - destellos intensos en el centro con el beat
+// intense flashes from center on beat
 func patternFlash(x, y float64, p params.Parameters, t float64) float64 {
-	r := x*x + y*y // más rápido que Hypot
+	r := x*x + y*y
 	flash := 1.0 - r
 	beat := p.BeatDistortion * 2.0
 	intensity := (flash + beat) * 2.0
@@ -72,7 +72,7 @@ func patternFlash(x, y float64, p params.Parameters, t float64) float64 {
 	return 0
 }
 
-// Grid - grid minimal que aparece con el audio
+// minimal grid that appears with audio
 func patternGrid(x, y float64, p params.Parameters, t float64) float64 {
 	gridX := x*3.0 + t*0.5
 	gridY := y*3.0 - t*0.3
@@ -84,7 +84,7 @@ func patternGrid(x, y float64, p params.Parameters, t float64) float64 {
 	return 0
 }
 
-// Spark - chispas que explotan desde el centro
+// sparks exploding from center
 func patternSpark(x, y float64, p params.Parameters, t float64) float64 {
 	angle := math.Atan2(y, x)
 	rays := angle*2.0 + t*2.0
@@ -96,7 +96,7 @@ func patternSpark(x, y float64, p params.Parameters, t float64) float64 {
 	return 0
 }
 
-// Pulse - pulso concéntrico minimal
+// concentric pulse rings
 func patternPulse(x, y float64, p params.Parameters, t float64) float64 {
 	r := math.Sqrt(x*x + y*y)
 	wave := r - t*2.0
@@ -109,7 +109,7 @@ func patternPulse(x, y float64, p params.Parameters, t float64) float64 {
 	return ring * ring * (1.0 + beat)
 }
 
-// Scatter - partículas dispersas
+// scattered particles
 func patternScatter(x, y float64, p params.Parameters, t float64) float64 {
 	cellX := math.Floor(x*5.0 + t)
 	cellY := math.Floor(y*5.0 + t*0.8)
@@ -121,7 +121,7 @@ func patternScatter(x, y float64, p params.Parameters, t float64) float64 {
 	return 0
 }
 
-// Beam - rayos verticales que reaccionan al audio
+// vertical beams reacting to audio
 func patternBeam(x, y float64, p params.Parameters, t float64) float64 {
 	beamPos := (t * 0.3)
 	beamPos = beamPos - math.Floor(beamPos)
@@ -136,7 +136,7 @@ func patternBeam(x, y float64, p params.Parameters, t float64) float64 {
 	return 0
 }
 
-// Ripple - ondas desde centro
+// ripples from center
 func patternRipple(x, y float64, p params.Parameters, t float64) float64 {
 	r := math.Sqrt(x*x + y*y)
 	wave := r*3.0 - t*3.0
@@ -147,7 +147,7 @@ func patternRipple(x, y float64, p params.Parameters, t float64) float64 {
 	return ripple * 2.0 * p.Amplitude
 }
 
-// Strobe - efecto estroboscópico
+// stroboscopic effect
 func patternStrobe(x, y float64, p params.Parameters, t float64) float64 {
 	phase := t*4.0 + p.BeatDistortion*2.0
 	strobe := phase - math.Floor(phase)
@@ -158,9 +158,8 @@ func patternStrobe(x, y float64, p params.Parameters, t float64) float64 {
 	return 0
 }
 
-// Particle - sistema de partículas minimal
+// minimal particle system
 func patternParticle(x, y float64, p params.Parameters, t float64) float64 {
-	// Solo 2 partículas (mucho más rápido)
 	speed := 0.4 + p.Amplitude*0.4
 	best := 0.0
 	for i := 0.0; i < 2.0; i++ {
@@ -180,7 +179,7 @@ func patternParticle(x, y float64, p params.Parameters, t float64) float64 {
 	return best * 3.0
 }
 
-// Laser - líneas laser que cruzan la pantalla
+// laser lines crossing the screen
 func patternLaser(x, y float64, p params.Parameters, t float64) float64 {
 	lineY := x + y*0.5 + t
 	dist := lineY - math.Floor(lineY)
@@ -194,7 +193,7 @@ func patternLaser(x, y float64, p params.Parameters, t float64) float64 {
 	return 0
 }
 
-// Waves - ondas minimalistas
+// minimalist waves
 func patternWaves(x, y float64, p params.Parameters, t float64) float64 {
 	wave := x*2.0 + y*2.0 + t
 	val := wave - math.Floor(wave)
@@ -204,7 +203,7 @@ func patternWaves(x, y float64, p params.Parameters, t float64) float64 {
 	return val * 2.0 * p.Amplitude
 }
 
-// Orbit - órbitas circulares minimal
+// circular orbits
 func patternOrbit(x, y float64, p params.Parameters, t float64) float64 {
 	r := math.Sqrt(x*x + y*y)
 	angle := math.Atan2(y, x)
@@ -220,7 +219,7 @@ func patternOrbit(x, y float64, p params.Parameters, t float64) float64 {
 	return 0
 }
 
-// Explosion - explosión desde el centro
+// explosion from center
 func patternExplosion(x, y float64, p params.Parameters, t float64) float64 {
 	r := math.Sqrt(x*x + y*y)
 	wave := r*4.0 - t*3.0
