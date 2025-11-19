@@ -5,13 +5,24 @@ REPO_ROOT="${REPO_ROOT:-$(pwd)}"
 DEBIAN_OUTPUT="${REPO_ROOT}/golizer-debian"
 PI_OUTPUT="${REPO_ROOT}/golizer-pi"
 
-BUILD_TAGS="${BUILD_TAGS:-}"
+# Skip arm64 cross build automatically if we are already on arm
+if [[ $(uname -m) == "aarch64" || $(uname -m) == "arm64" ]]; then
+  SKIP_ARM64=1
+fi
+
+# Optional verbose mode
+BUILD_FLAGS=()
+if [[ "${VERBOSE_BUILD:-0}" -eq 1 ]]; then
+  BUILD_FLAGS+=(-v -x)
+  echo "==> Verbose build enabled"
+fi
 
 pushd "${REPO_ROOT}" >/dev/null
 
 go mod tidy
 
 echo "==> Detecting render backend support"
+BUILD_TAGS="${BUILD_TAGS:-}"
 if pkg-config --exists sdl2 >/dev/null 2>&1; then
   if [[ -z "${BUILD_TAGS}" ]]; then
     BUILD_TAGS="sdl"
@@ -25,12 +36,13 @@ fi
 
 echo "==> Building golizer-debian"
 if [[ -n "${BUILD_TAGS}" ]]; then
-  go build -tags "${BUILD_TAGS}" -o "${DEBIAN_OUTPUT}" ./cmd/visualizer
+  go build ${BUILD_FLAGS[*]} -tags "${BUILD_TAGS}" -o "${DEBIAN_OUTPUT}" ./cmd/visualizer
 else
-  go build -o "${DEBIAN_OUTPUT}" ./cmd/visualizer
+  go build ${BUILD_FLAGS[*]} -o "${DEBIAN_OUTPUT}" ./cmd/visualizer
 fi
 
-if [[ "${SKIP_ARM64:-0}" -ne 1 ]]; then
+default_skip=${SKIP_ARM64:-0}
+if [[ "${default_skip}" -ne 1 ]]; then
   echo "==> Building golizer-pi (arm64)"
   ARM_ENV=(GOOS=linux GOARCH=arm64 CGO_ENABLED=1)
   if command -v aarch64-linux-gnu-gcc >/dev/null 2>&1; then
@@ -42,9 +54,9 @@ if [[ "${SKIP_ARM64:-0}" -ne 1 ]]; then
   if [[ -n "${ARM_ENV[*]}" ]]; then
     set +e
     if [[ -n "${BUILD_TAGS}" ]]; then
-      env "${ARM_ENV[@]}" go build -tags "${BUILD_TAGS}" -o "${PI_OUTPUT}" ./cmd/visualizer
+      env "${ARM_ENV[@]}" go build ${BUILD_FLAGS[*]} -tags "${BUILD_TAGS}" -o "${PI_OUTPUT}" ./cmd/visualizer
     else
-      env "${ARM_ENV[@]}" go build -o "${PI_OUTPUT}" ./cmd/visualizer
+      env "${ARM_ENV[@]}" go build ${BUILD_FLAGS[*]} -o "${PI_OUTPUT}" ./cmd/visualizer
     fi
     STATUS=$?
     set -e
