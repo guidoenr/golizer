@@ -70,7 +70,7 @@ the script auto-detects your architecture and builds the right binary:
 --quality balanced             # auto|high|balanced|eco
 --backend ascii                # ascii|sdl
 --palette auto                 # auto|default|box|lines|spark|retro|minimal|block|bubble
---pattern auto                 # auto|dots|flash|grid|spark|pulse|scatter|beam|ripple|strobe|particle|laser|waves|orbit|explosion
+--pattern auto                 # auto|flash|spark|scatter|beam|ripple|strobe|laser|orbit|explosion|rings|zigzag|cross|spiral|star
 --color-mode chromatic         # chromatic|fire|aurora|mono
 --color-on-audio               # fade from black to neon based on audio
 
