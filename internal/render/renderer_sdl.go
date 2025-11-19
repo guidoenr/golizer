@@ -5,6 +5,7 @@ package render
 import (
 	"fmt"
 	"math"
+	"runtime"
 	"unsafe"
 
 	"github.com/guidoenr/golizer/internal/analyzer"
@@ -30,6 +31,17 @@ func (r *Renderer) initSDL(width, height int) error {
 		r.useANSI = false
 		return nil
 	}
+	
+	// Configurar hints de SDL para mejor rendimiento en plataformas embebidas
+	if isEmbeddedPlatform() {
+		// Usar rendering por software o hardware según disponibilidad
+		sdl.SetHint(sdl.HINT_RENDER_DRIVER, "opengles2")
+		// Mejorar el scaling en fullscreen
+		sdl.SetHint(sdl.HINT_RENDER_SCALE_QUALITY, "0")
+		// Prevenir screen tearing
+		sdl.SetHint(sdl.HINT_RENDER_VSYNC, "1")
+	}
+	
 	if err := sdl.InitSubSystem(sdl.INIT_VIDEO); err != nil {
 		return err
 	}
@@ -54,9 +66,21 @@ func (r *Renderer) ensureSDLResources() error {
 	}
 	if state.window == nil {
 		flags := uint32(sdl.WINDOW_SHOWN)
+		
+		// En Raspberry Pi, WINDOW_FULLSCREEN funciona mejor que WINDOW_FULLSCREEN_DESKTOP
+		// para evitar problemas de scaling y aspect ratio
+		var fullscreenMode uint32 = sdl.WINDOW_FULLSCREEN_DESKTOP
 		if r.fullscreen {
-			flags = sdl.WINDOW_FULLSCREEN_DESKTOP
+			// Detectar si estamos en un entorno embebido (ARM)
+			// En estos casos, usar WINDOW_FULLSCREEN es más confiable
+			if isEmbeddedPlatform() {
+				fullscreenMode = sdl.WINDOW_FULLSCREEN
+				flags = sdl.WINDOW_FULLSCREEN
+			} else {
+				flags = sdl.WINDOW_FULLSCREEN_DESKTOP
+			}
 		}
+		
 		window, err := sdl.CreateWindow(
 			"golizer",
 			sdl.WINDOWPOS_CENTERED, sdl.WINDOWPOS_CENTERED,
@@ -68,7 +92,7 @@ func (r *Renderer) ensureSDLResources() error {
 		}
 		state.window = window
 		if r.fullscreen {
-			_ = window.SetFullscreen(sdl.WINDOW_FULLSCREEN_DESKTOP)
+			_ = window.SetFullscreen(fullscreenMode)
 		}
 	}
 	logicalW := int32(r.width)
@@ -242,6 +266,14 @@ func (r *Renderer) closeSDL() error {
 
 func (r *Renderer) windowedSDL() bool {
 	return r.sdl != nil
+}
+
+// isEmbeddedPlatform detecta si estamos corriendo en una plataforma embebida
+// como Raspberry Pi, donde SDL_WINDOW_FULLSCREEN funciona mejor que SDL_WINDOW_FULLSCREEN_DESKTOP
+func isEmbeddedPlatform() bool {
+	arch := runtime.GOARCH
+	// Detectar ARM/ARM64 que típicamente son Raspberry Pi u otros SBCs
+	return arch == "arm" || arch == "arm64"
 }
 
 func SupportsSDL() bool { return true }
