@@ -208,7 +208,7 @@ func (r *Renderer) resizeSDL() {
 		}
 		width := int32(math.Max(1, float64(r.width)*scale))
 		height := int32(math.Max(1, float64(r.height)*scale))
-		_ = r.sdl.window.SetSize(width, height)
+		r.sdl.window.SetSize(width, height)
 	}
 	_ = r.sdl.renderer.SetLogicalSize(int32(r.width), int32(r.height))
 	r.sdl.width = 0
