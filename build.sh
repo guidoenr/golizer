@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO_ROOT="${REPO_ROOT:-$(pwd)}"
-DEBIAN_OUTPUT="${REPO_ROOT}/golizer-debian"
+OUTPUT="${REPO_ROOT}/golizer"
 BUILD_TAGS="${BUILD_TAGS:-}"
 
 pushd "${REPO_ROOT}" >/dev/null
@@ -21,18 +21,15 @@ else
   echo "    SDL2 not detected -> building ASCII backend only"
 fi
 
-echo "==> Building golizer-debian"
+echo "==> Building golizer"
 if [[ -n "${BUILD_TAGS}" ]]; then
-  echo "    go build ${BUILD_TAGS} -> ${DEBIAN_OUTPUT}"
-  go build -tags "${BUILD_TAGS}" -o "${DEBIAN_OUTPUT}" ./cmd/visualizer 2>&1 | tee build-debian.log
+  go build -tags "${BUILD_TAGS}" -o "${OUTPUT}" ./cmd/visualizer
 else
-  echo "    go build -> ${DEBIAN_OUTPUT}"
-  go build -o "${DEBIAN_OUTPUT}" ./cmd/visualizer 2>&1 | tee build-debian.log
+  go build -o "${OUTPUT}" ./cmd/visualizer
 fi
 
 popd >/dev/null
 
 echo ""
-echo "Binaries generated:" 
-[[ -f "${DEBIAN_OUTPUT}" ]] && echo "  ${DEBIAN_OUTPUT}"
+echo "Binary generated: ${OUTPUT}"
 
