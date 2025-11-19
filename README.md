@@ -1,6 +1,7 @@
 # golizer
 https://github.com/user-attachments/assets/d6cabc5b-8964-438b-991c-7e50564962c3
 > the setup showed in video is: Raspberry Pi4 Model B, with a Mic plugged in and a HDMI port to my TV
+
 > the raspberry is running the `golizer` binary and listening to a analog sound system
 
 
