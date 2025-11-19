@@ -16,14 +16,20 @@ type patternEntry struct {
 }
 
 var patternRegistry = map[string]patternEntry{
-	"plasma":  {patternPlasma, 0.4},
-	"waves":   {patternWaves, 0.4},
-	"ripples": {patternRipples, 0.4},
-	"nebula":  {patternNebula, 0.4},
-	"noise":   {patternNoise, 0.4},
-	"bands":   {patternBands, 0.0},
-	"strata":  {patternStrata, 0.1},
-	"orbits":  {patternOrbits, 0.15},
+	"plasma":    {patternPlasma, 0.4},
+	"waves":     {patternWaves, 0.4},
+	"ripples":   {patternRipples, 0.4},
+	"nebula":    {patternNebula, 0.4},
+	"noise":     {patternNoise, 0.4},
+	"bands":     {patternBands, 0.0},
+	"strata":    {patternStrata, 0.1},
+	"orbits":    {patternOrbits, 0.15},
+	"tunnel":    {patternTunnel, 0.3},
+	"spiral":    {patternSpiral, 0.35},
+	"pulse":     {patternPulse, 0.2},
+	"vortex":    {patternVortex, 0.4},
+	"frequency": {patternFrequency, 0.1},
+	"mandala":   {patternMandala, 0.25},
 }
 
 var noiseOctaves atomic.Int32
@@ -153,6 +159,63 @@ func smoothstep(v float64) float64 {
 
 func lerpFloat(a, b, t float64) float64 {
 	return a*(1-t) + b*t
+}
+
+// Tunnel - efecto túnel hipnótico que responde al beat
+func patternTunnel(x, y float64, p params.Parameters, t float64) float64 {
+	r := math.Hypot(x, y)
+	depth := r - t*1.5
+	rings := math.Sin(depth * math.Max(3.0, p.Frequency*0.5))
+	theta := math.Atan2(y, x)
+	twist := math.Sin(theta*6.0 + depth*0.8) * 0.3
+	return rings + twist
+}
+
+// Spiral - espirales que giran con la música
+func patternSpiral(x, y float64, p params.Parameters, t float64) float64 {
+	r := math.Hypot(x, y)
+	theta := math.Atan2(y, x)
+	spiral := math.Sin(r*4.0 - theta*3.0 + t*1.2)
+	pulse := math.Sin(r*2.0 - t*0.8) * 0.4
+	return spiral*0.8 + pulse
+}
+
+// Pulse - pulsos concéntricos desde el centro
+func patternPulse(x, y float64, p params.Parameters, t float64) float64 {
+	r := math.Hypot(x, y)
+	beat := p.Beat * 3.0
+	pulse := math.Sin((r-t*1.5)*math.Max(4.0, p.Frequency*0.7) + beat)
+	fade := math.Exp(-r * 0.5)
+	return pulse * (0.6 + fade*0.4)
+}
+
+// Vortex - vórtice que se retuerce con el audio
+func patternVortex(x, y float64, p params.Parameters, t float64) float64 {
+	r := math.Hypot(x, y)
+	theta := math.Atan2(y, x)
+	twist := r * 2.0
+	rotation := theta*4.0 + twist - t*1.8
+	wave := math.Sin(rotation + p.Beat*2.0)
+	depth := math.Sin(r*3.0 - t) * 0.4
+	return wave*0.7 + depth
+}
+
+// Frequency - bandas verticales como un ecualizador
+func patternFrequency(x, y float64, p params.Parameters, t float64) float64 {
+	bands := math.Sin(x * math.Max(8.0, p.Frequency*1.2))
+	modulation := math.Sin((y + t*0.6) * 3.0) * 0.3
+	pulse := p.Beat * 0.8
+	return (bands + modulation + pulse) * 0.8
+}
+
+// Mandala - patrón simétrico tipo mandala
+func patternMandala(x, y float64, p params.Parameters, t float64) float64 {
+	r := math.Hypot(x, y)
+	theta := math.Atan2(y, x)
+	petals := math.Sin(theta*8.0 + t*0.7) * math.Cos(r*4.0 - t*0.5)
+	center := math.Sin(r*6.0 + theta*4.0 - t*1.2) * 0.5
+	radial := math.Cos(r*3.0 + t*0.4) * 0.3
+	return petals*0.6 + center + radial
 }
 
 func setNoiseProfile(mode qualityMode) {

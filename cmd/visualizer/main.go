@@ -25,13 +25,13 @@ func main() {
 		deviceName = flag.String("audio-device", "", "Optional PortAudio device name (substring match)")
 		width      = flag.Int("width", 120, "Frame width (ASCII columns or SDL resolution)")
 		height     = flag.Int("height", 40, "Frame height (ASCII rows or SDL resolution)")
-		targetFPS  = flag.Float64("fps", 1000, "Target frames per second")
+		targetFPS  = flag.Float64("fps", 0, "Target frames per second (0 = unlimited)")
 		bufferSize = flag.Int("buffer-size", 2048, "FFT buffer size (power of two recommended)")
 		noAudio    = flag.Bool("no-audio", false, "Run with synthetic audio (for testing)")
 		debug      = flag.Bool("debug", false, "Enable verbose logging")
 		showStatus = flag.Bool("status", true, "Display status bar")
 		palette    = flag.String("palette", "auto", "ASCII palette (auto|default|box|lines|spark|retro|minimal|block|bubble)")
-		pattern    = flag.String("pattern", "auto", "Visual pattern (auto|plasma|waves|ripples|nebula|noise|bands|strata|orbits)")
+		pattern    = flag.String("pattern", "auto", "Visual pattern (auto|plasma|waves|ripples|nebula|noise|bands|strata|orbits|tunnel|spiral|pulse|vortex|frequency|mandala)")
 		colorMode  = flag.String("color-mode", "chromatic", "Color mode (chromatic|fire|aurora|mono)")
 		listDevs   = flag.Bool("list-audio-devices", false, "List available audio input devices and exit")
 		colorBurst = flag.Bool("color-on-audio", true, "Fade from monochrome to color based on audio energy")
@@ -44,7 +44,7 @@ func main() {
 		frameScale = flag.Float64("scale", 1.0, "Pixel scale multiplier (SDL)")
 		fullscreen = flag.Bool("fullscreen", false, "Use fullscreen SDL window")
 		profileLog = flag.String("profile-log", "", "Optional path to append frame timing metrics")
-		noiseFloor = flag.Float64("noise-floor", 0.10, "Energy gate to ignore ambient noise (0-0.5)")
+		noiseFloor = flag.Float64("noise-floor", 0.15, "Energy gate to ignore ambient noise (0-0.5)")
 	)
 
 	flag.Parse()
@@ -69,8 +69,8 @@ func main() {
 		log.Fatalf("invalid dimensions: width=%d height=%d", *width, *height)
 	}
 
-	if *targetFPS <= 0 {
-		log.Fatalf("fps must be positive (got %.2f)", *targetFPS)
+	if *targetFPS < 0 {
+		log.Fatalf("fps must be positive or 0 for unlimited (got %.2f)", *targetFPS)
 	}
 
 	if *bufferSize <= 0 {
@@ -151,7 +151,7 @@ func main() {
 	}
 
 	targetFPSValue := *targetFPS
-	if !flagIsPassed("fps") {
+	if !flagIsPassed("fps") || targetFPSValue == 0 {
 		targetFPSValue = defaultFPSForQuality(qualityName)
 	}
 
