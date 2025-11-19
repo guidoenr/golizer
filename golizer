@@ -1,0 +1,9 @@
+#!/bin/bash
+set -euo pipefail
+BIN_DIR="/usr/local/lib/golizer"
+TARGET="${BIN_DIR}/golizer.bin"
+if [[ ! -x "${TARGET}" ]]; then
+	echo "golizer wrapper error: missing binary at ${TARGET}" >&2
+	exit 1
+fi
+exec nice -n -5 "${TARGET}" "$@"
