@@ -1,0 +1,3 @@
+# github.com/guidoenr/golizer/internal/render
+internal/render/renderer.go:241:5: r.applyFullscreen undefined (type *Renderer has no field or method applyFullscreen)
+internal/render/renderer_sdl.go:211:7: r.sdl.window.SetSize(width, height) (no value) used as value

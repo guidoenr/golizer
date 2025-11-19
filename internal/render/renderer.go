@@ -237,9 +237,6 @@ func (r *Renderer) SetScale(scale float64) {
 
 func (r *Renderer) SetFullscreen(enabled bool) {
 	r.fullscreen = enabled
-	if r.mode == backendSDL && r.sdl != nil {
-		r.applyFullscreen()
-	}
 }
 
 // Resize updates the framebuffer dimensions.
