@@ -120,6 +120,8 @@ type Renderer struct {
 	scale         float64
 	downsample    int
 	fullscreen    bool
+	webPanelURL   string
+	showWebURL    bool
 }
 
 // Frame contains the rendered ASCII lines and optional status text.
@@ -237,6 +239,16 @@ func (r *Renderer) SetScale(scale float64) {
 
 func (r *Renderer) SetFullscreen(enabled bool) {
 	r.fullscreen = enabled
+}
+
+// SetWebPanelURL sets the web panel URL to display in status bar
+func (r *Renderer) SetWebPanelURL(url string) {
+	r.webPanelURL = url
+}
+
+// SetShowWebPanelURL enables/disables showing web panel URL in status bar
+func (r *Renderer) SetShowWebPanelURL(show bool) {
+	r.showWebURL = show
 }
 
 // Resize updates the framebuffer dimensions.
@@ -747,7 +759,14 @@ func (r *Renderer) ensureCoordinateCache(width, height int) {
 func (r *Renderer) buildStatus(feat analyzer.Features, fps float64) string {
 	builder := &r.statusBuilder
 	builder.Reset()
-	builder.Grow(128)
+	builder.Grow(256)
+	
+	// show web panel URL at the start if enabled
+	if r.showWebURL && r.webPanelURL != "" {
+		builder.WriteString(r.webPanelURL)
+		builder.WriteString(" | ")
+	}
+	
 	builder.WriteString(colorModeLabel(r.colorMode))
 	builder.WriteString(" | palette=")
 	builder.WriteString(r.paletteName)

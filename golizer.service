@@ -1,0 +1,17 @@
+[Unit]
+Description=golizer audio visualizer
+After=network.target sound.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/golizer
+ExecStart=/home/pi/golizer/golizer-pi --web-port 8080
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+

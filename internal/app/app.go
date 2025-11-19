@@ -54,6 +54,7 @@ const (
 
 // App ties together audio capture, analysis, and rendering.
 type App struct {
+	mu             sync.RWMutex
 	cfg            Config
 	params         params.Parameters
 	renderer       *render.Renderer
@@ -85,6 +86,8 @@ type App struct {
 	skipCounter    int
 	frameScale     float64
 	fullscreen     bool
+	lastFeatures   analyzer.Features
+	lastFPS        float64
 }
 
 // New constructs the application using the provided configuration.
@@ -228,8 +231,11 @@ func (a *App) Run(ctx context.Context) error {
 		clearScreen()
 		hideCursor()
 		defer func() {
+			// always restore terminal state
 			showCursor()
 			exitAltScreen()
+			// ensure we're back to normal mode
+			fmt.Print("\x1b[0m")
 		}()
 	}
 
@@ -243,6 +249,10 @@ func (a *App) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			if !a.windowMode {
 				moveCursorHome()
+				// restore terminal state immediately
+				showCursor()
+				exitAltScreen()
+				fmt.Print("\x1b[0m")
 			}
 			return ctx.Err()
 		case evt, ok := <-a.inputEvents:
@@ -256,6 +266,10 @@ func (a *App) Run(ctx context.Context) error {
 			case inputEventQuit:
 				if !a.windowMode {
 					moveCursorHome()
+					// restore terminal state immediately
+					showCursor()
+					exitAltScreen()
+					fmt.Print("\x1b[0m")
 				}
 				return nil
 			}
@@ -329,6 +343,12 @@ func (a *App) step() error {
 	a.params.UpdateTime(delta)
 
 	fps := 1.0 / delta
+	
+	// update last features and fps for web server
+	a.mu.Lock()
+	a.lastFeatures = features
+	a.lastFPS = fps
+	a.mu.Unlock()
 	if a.profiler != nil {
 		a.profiler.markSection("render")
 	}
@@ -565,3 +585,66 @@ func pickRandom(options []string, current string, rng *rand.Rand) string {
 	}
 	return options[rng.Intn(len(options))]
 }
+
+// GetParams returns current parameters (thread-safe)
+func (a *App) GetParams() params.Parameters {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.params
+}
+
+// SetParams updates parameters (thread-safe)
+func (a *App) SetParams(p params.Parameters) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.params = p
+}
+
+// GetRenderer returns the renderer (thread-safe)
+func (a *App) GetRenderer() *render.Renderer {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.renderer
+}
+
+// GetFeatures returns last analyzed features (thread-safe)
+func (a *App) GetFeatures() analyzer.Features {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.lastFeatures
+}
+
+// GetFPS returns last FPS (thread-safe)
+func (a *App) GetFPS() float64 {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.lastFPS
+}
+
+// ConfigGetter interface for accessing config values (matches web.AppInterface)
+type ConfigGetter interface {
+	NoiseFloor() float64
+	BufferSize() int
+	TargetFPS() float64
+	Quality() string
+	Width() int
+	Height() int
+}
+
+// GetConfig returns current configuration (thread-safe)
+func (a *App) GetConfig() ConfigGetter {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return &configWrapper{cfg: a.cfg}
+}
+
+type configWrapper struct {
+	cfg Config
+}
+
+func (c *configWrapper) NoiseFloor() float64 { return c.cfg.NoiseFloor }
+func (c *configWrapper) BufferSize() int     { return c.cfg.BufferSize }
+func (c *configWrapper) TargetFPS() float64  { return c.cfg.TargetFPS }
+func (c *configWrapper) Quality() string     { return c.cfg.Quality }
+func (c *configWrapper) Width() int          { return c.cfg.Width }
+func (c *configWrapper) Height() int         { return c.cfg.Height }

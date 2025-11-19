@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>golizer control panel</title>
+		<link rel="stylesheet" href="/static/style.css" />
+	</head>
+	<body>
+		<div class="container">
+			<header>
+				<h1>LIBERTADOR MANSION VISUALS</h1>
+				<div class="status">
+					<span id="fps">-- fps</span>
+					<span id="connection" class="status-indicator">connecting...</span>
+					<button id="saveBtn" class="btn-save">💾 SAVE</button>
+				</div>
+			</header>
+
+			<div class="grid">
+				<!-- Visuals Section -->
+				<section class="card">
+					<h2>visuals</h2>
+					<div class="control-group">
+						<label>pattern</label>
+						<select id="pattern"></select>
+					</div>
+					<div class="control-group">
+						<label>palette</label>
+						<select id="palette"></select>
+					</div>
+					<div class="control-group">
+						<label>color mode</label>
+						<select id="colorMode"></select>
+					</div>
+					<div class="control-group">
+						<label>
+							<input type="checkbox" id="colorOnAudio" />
+							color on audio
+						</label>
+					</div>
+				</section>
+
+				<!-- Audio Section -->
+				<section class="card">
+					<h2>audio</h2>
+					<div class="control-group">
+						<label>noise floor <span id="noiseFloorValue">0.20</span></label>
+						<input
+							type="range"
+							id="noiseFloor"
+							min="0"
+							max="0.5"
+							step="0.01"
+							value="0.20"
+						/>
+					</div>
+					<div class="control-group">
+						<label>buffer size</label>
+						<input
+							type="number"
+							id="bufferSize"
+							min="256"
+							max="8192"
+							step="256"
+							value="2048"
+						/>
+					</div>
+					<div class="audio-stats">
+						<div>Bass: <span id="bass">0.00</span></div>
+						<div>Mid: <span id="mid">0.00</span></div>
+						<div>Treble: <span id="treble">0.00</span></div>
+						<div>Beat: <span id="beat">0.00</span></div>
+					</div>
+				</section>
+
+				<!-- Performance Section -->
+				<section class="card">
+					<h2>performance</h2>
+					<div class="control-group">
+						<label>target fps <span id="targetFPSValue">90</span></label>
+						<input
+							type="range"
+							id="targetFPS"
+							min="0"
+							max="120"
+							step="1"
+							value="90"
+						/>
+						<small>0 = unlimited</small>
+					</div>
+					<div class="control-group">
+						<label>quality</label>
+						<select id="quality">
+							<option value="eco">eco</option>
+							<option value="balanced" selected>balanced</option>
+							<option value="high">high</option>
+						</select>
+					</div>
+					<div class="control-group">
+						<label>width</label>
+						<input
+							type="number"
+							id="width"
+							min="40"
+							max="200"
+							step="10"
+							value="120"
+						/>
+					</div>
+					<div class="control-group">
+						<label>height</label>
+						<input
+							type="number"
+							id="height"
+							min="20"
+							max="80"
+							step="5"
+							value="40"
+						/>
+					</div>
+				</section>
+
+				<!-- Parameters Section -->
+				<section class="card">
+					<h2>parameters</h2>
+					<div class="control-group">
+						<label>frequency <span id="frequencyValue">6.0</span></label>
+						<input
+							type="range"
+							id="frequency"
+							min="1"
+							max="20"
+							step="0.5"
+							value="6.0"
+						/>
+					</div>
+					<div class="control-group">
+						<label>amplitude <span id="amplitudeValue">0.0</span></label>
+						<input
+							type="range"
+							id="amplitude"
+							min="0"
+							max="3"
+							step="0.1"
+							value="0.0"
+						/>
+					</div>
+					<div class="control-group">
+						<label>speed <span id="speedValue">0.05</span></label>
+						<input
+							type="range"
+							id="speed"
+							min="0"
+							max="1"
+							step="0.01"
+							value="0.05"
+						/>
+					</div>
+					<div class="control-group">
+						<label>brightness <span id="brightnessValue">0.0</span></label>
+						<input
+							type="range"
+							id="brightness"
+							min="0"
+							max="3"
+							step="0.1"
+							value="0.0"
+						/>
+					</div>
+					<div class="control-group">
+						<label>contrast <span id="contrastValue">0.8</span></label>
+						<input
+							type="range"
+							id="contrast"
+							min="0"
+							max="2"
+							step="0.1"
+							value="0.8"
+						/>
+					</div>
+					<div class="control-group">
+						<label>saturation <span id="saturationValue">0.9</span></label>
+						<input
+							type="range"
+							id="saturation"
+							min="0"
+							max="2"
+							step="0.1"
+							value="0.9"
+						/>
+					</div>
+				</section>
+
+				<!-- Beat Response Section -->
+				<section class="card">
+					<h2>beat response</h2>
+					<div class="control-group">
+						<label
+							>beat sensitivity
+							<span id="beatSensitivityValue">1.2</span></label
+						>
+						<input
+							type="range"
+							id="beatSensitivity"
+							min="0.5"
+							max="3"
+							step="0.1"
+							value="1.2"
+						/>
+					</div>
+					<div class="control-group">
+						<label
+							>bass influence <span id="bassInfluenceValue">0.85</span></label
+						>
+						<input
+							type="range"
+							id="bassInfluence"
+							min="0"
+							max="2"
+							step="0.05"
+							value="0.85"
+						/>
+					</div>
+					<div class="control-group">
+						<label
+							>mid influence <span id="midInfluenceValue">0.25</span></label
+						>
+						<input
+							type="range"
+							id="midInfluence"
+							min="0"
+							max="2"
+							step="0.05"
+							value="0.25"
+						/>
+					</div>
+					<div class="control-group">
+						<label
+							>treble influence
+							<span id="trebleInfluenceValue">0.15</span></label
+						>
+						<input
+							type="range"
+							id="trebleInfluence"
+							min="0"
+							max="2"
+							step="0.05"
+							value="0.15"
+						/>
+					</div>
+				</section>
+
+				<!-- Randomization Section -->
+				<section class="card">
+					<h2>randomization</h2>
+					<div class="control-group">
+						<label>
+							<input type="checkbox" id="autoRandomize" checked />
+							auto randomize
+						</label>
+					</div>
+					<div class="control-group">
+						<label
+							>interval (seconds)
+							<span id="randomIntervalValue">10</span></label
+						>
+						<input
+							type="range"
+							id="randomInterval"
+							min="1"
+							max="60"
+							step="1"
+							value="10"
+						/>
+					</div>
+					<div class="control-group">
+						<button id="randomizeBtn" class="btn">randomize now</button>
+					</div>
+				</section>
+			</div>
+		</div>
+
+		<script src="/static/app.js"></script>
+	</body>
+</html>

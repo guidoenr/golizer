@@ -25,6 +25,7 @@ captures audio via portaudio, does fft analysis for bass/mid/treble, detects kic
 - **quality presets**: eco/balanced/high - auto-detects your platform
 - **simple ascii**: fast characters (.,:;ox%#@) instead of slow unicode
 - **black by default**: screen stays black until audio kicks in, then it explodes
+- **web control panel**: full web interface to control everything from your phone (http://golizer.local:8080)
 
 ## quick start
 
@@ -83,10 +84,85 @@ the script auto-detects your architecture and builds the right binary:
 --no-color                     # disable ansi colors
 --fullscreen                   # sdl fullscreen mode
 
+# web server
+--web-port 8080                # web control panel port (default: 8080, 0 = disabled)
+--no-web                       # disable web server
+--show-web-url                 # show web panel URL in status bar (default: true)
+
 # debug
 --debug                        # verbose logging
 --profile-log path.csv         # frame timing metrics
 ```
+
+## web control panel
+
+golizer includes a full web interface to control everything from your phone or any device on your local network.
+
+### web server (automatic)
+
+the web server starts automatically on port 8080. just run:
+
+```bash
+./golizer-pi
+```
+
+then open in your browser:
+- **http://localhost:8080** (on the pi itself)
+- **http://<pi-ip>:8080** (from any device on your network)
+- **http://golizer.local:8080** (if mDNS is configured - the binary tries to set this up automatically)
+
+to disable the web server:
+```bash
+./golizer-pi --no-web
+```
+
+to change the port:
+```bash
+./golizer-pi --web-port 9000
+```
+
+### auto-start on boot (raspberry pi)
+
+the web server starts automatically when you run the binary. to make it start on boot, create a systemd service:
+
+```bash
+# create service file
+sudo tee /etc/systemd/system/golizer.service > /dev/null <<EOF
+[Unit]
+Description=golizer audio visualizer
+After=network.target sound.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/golizer
+ExecStart=/home/pi/golizer/golizer-pi
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# enable and start
+sudo systemctl daemon-reload
+sudo systemctl enable golizer
+sudo systemctl start golizer
+```
+
+the binary will automatically try to configure mDNS for `golizer.local` access.
+
+### web panel features
+
+- **visuals**: change pattern, palette, color mode in real-time
+- **audio**: adjust noise floor, buffer size, see live audio stats
+- **performance**: control fps, quality, resolution
+- **parameters**: fine-tune frequency, amplitude, speed, brightness, contrast, saturation
+- **beat response**: adjust sensitivity and influence of bass/mid/treble
+- **randomization**: enable/disable auto-randomize, set interval, trigger manually
+- **save config**: click "💾 SAVE" button to save all current settings as defaults
+
+all changes apply instantly via websocket connection. saved config is loaded automatically on next startup.
 
 ## keyboard controls
 
