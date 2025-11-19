@@ -44,7 +44,7 @@ func main() {
 		frameScale = flag.Float64("scale", 1.0, "Pixel scale multiplier (SDL)")
 		fullscreen = flag.Bool("fullscreen", false, "Use fullscreen SDL window")
 		profileLog = flag.String("profile-log", "", "Optional path to append frame timing metrics")
-		noiseFloor = flag.Float64("noise-floor", 0.15, "Energy gate to ignore ambient noise (0-0.5)")
+		noiseFloor = flag.Float64("noise-floor", 0.20, "Energy gate to ignore ambient noise (0-0.5)")
 	)
 
 	flag.Parse()
