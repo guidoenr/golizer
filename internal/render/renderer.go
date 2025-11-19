@@ -535,9 +535,9 @@ func (r *Renderer) buildFrameParams(p params.Parameters, time float64) framePara
 		warpStrength = 0
 		swirlStrength = 0
 	case qualityBalanced:
-		detailWeight *= 0.75
-		warpStrength *= 0.85
-		swirlStrength *= 0.9
+		detailWeight *= 0.85
+		warpStrength *= 0.9
+		swirlStrength *= 0.95
 	}
 
 	return frameParams{
