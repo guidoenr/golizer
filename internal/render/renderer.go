@@ -117,6 +117,8 @@ type Renderer struct {
 	yCoords       []float64
 	statusBuilder strings.Builder
 	sdl           *sdlState
+	scale         float64
+	downsample    int
 }
 
 // Frame contains the rendered ASCII lines and optional status text.
@@ -155,8 +157,10 @@ func NewWithBackend(backend Backend, width, height int, paletteName, patternName
 	}
 
 	r := &Renderer{
-		width:  width,
-		height: height,
+		width:      width,
+		height:     height,
+		scale:      1.0,
+		downsample: 1,
 	}
 
 	if backend == BackendSDL {
@@ -199,6 +203,30 @@ func (r *Renderer) Configure(paletteName, patternName, colorModeName string, col
 
 	r.colorMode = parseColorMode(colorModeName)
 	r.colorOnAudio = colorOnAudio
+}
+
+// SetScale adjusts the internal pixel downsampling factor (SDL only).
+func (r *Renderer) SetScale(scale float64) {
+	if scale <= 0 {
+		scale = 1
+	}
+	r.scale = scale
+	if r.mode == backendSDL {
+		if scale < 1 {
+			ds := int(math.Round(1.0 / scale))
+			if ds < 1 {
+				ds = 1
+			}
+			if ds > 8 {
+				ds = 8
+			}
+			r.downsample = ds
+		} else {
+			r.downsample = 1
+		}
+	} else {
+		r.downsample = 1
+	}
 }
 
 // Resize updates the framebuffer dimensions.

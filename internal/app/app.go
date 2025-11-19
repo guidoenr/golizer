@@ -37,6 +37,9 @@ type Config struct {
 	AutoRandomize  bool
 	RandomInterval time.Duration
 	Backend        string
+	FrameStride    int
+	Scale          float64
+	NoiseFloor     float64
 	ProfileLog     string
 	Log            *log.Logger
 }
@@ -77,6 +80,9 @@ type App struct {
 	currentLines   []string
 	profiler       *profiler
 	windowMode     bool
+	frameStride    int
+	skipCounter    int
+	frameScale     float64
 }
 
 // New constructs the application using the provided configuration.
@@ -139,6 +145,15 @@ func New(cfg Config) (*App, error) {
 	app.windowMode = renderer.IsWindowed()
 	if app.windowMode {
 		app.cfg.ShowStatusBar = false
+		renderer.SetScale(app.frameScale)
+	}
+	app.frameStride = cfg.FrameStride
+	if app.frameStride <= 0 {
+		app.frameStride = 1
+	}
+	app.frameScale = cfg.Scale
+	if app.frameScale <= 0 {
+		app.frameScale = 1.0
 	}
 	if len(app.paletteOptions) == 0 {
 		app.paletteOptions = []string{"default"}
@@ -297,6 +312,9 @@ func (a *App) step() error {
 			a.profiler.markSection("analyze")
 		}
 		features = a.analyzer.Analyze(a.sampleBuffer, delta)
+		if a.cfg.NoiseFloor > 0 {
+			features = analyzer.GateFeatures(features, a.cfg.NoiseFloor)
+		}
 	} else if a.fake != nil {
 		features = a.fake.Next(delta)
 	}
@@ -311,6 +329,14 @@ func (a *App) step() error {
 	if a.profiler != nil {
 		a.profiler.markSection("render")
 	}
+	if a.frameStride > 1 {
+		if a.skipCounter < a.frameStride-1 {
+			a.skipCounter++
+			return nil
+		}
+		a.skipCounter = 0
+	}
+
 	frame := a.renderer.Render(a.params, features, fps)
 	statusText := frame.Status
 	if a.deviceLabel != "" && a.cfg.DisableAudio == false {

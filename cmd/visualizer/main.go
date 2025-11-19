@@ -40,7 +40,10 @@ func main() {
 		autoRandom = flag.Bool("auto-randomize", true, "Automatically randomize visuals periodically")
 		randomFreq = flag.Duration("randomize-interval", 10*time.Second, "Interval between automatic visual randomization")
 		backend    = flag.String("backend", "auto", "Renderer backend (auto|ascii|sdl)")
+		stride     = flag.Int("stride", 1, "Render every Nth frame (1 = no skip)")
+		frameScale = flag.Float64("scale", 1.0, "Pixel scale multiplier (SDL)")
 		profileLog = flag.String("profile-log", "", "Optional path to append frame timing metrics")
+		noiseFloor = flag.Float64("noise-floor", 0.08, "Energy gate to ignore ambient noise (0-0.5)")
 	)
 
 	flag.Parse()
@@ -176,6 +179,9 @@ func main() {
 		RandomInterval: *randomFreq,
 		ProfileLog:     *profileLog,
 		Backend:        backendName,
+		FrameStride:    maxInt(1, *stride),
+		Scale:          clampFloat(*frameScale, 0.25, 2.0),
+		NoiseFloor:     clampFloat(*noiseFloor, 0.0, 0.5),
 		Log:            logger,
 	}
 
@@ -310,4 +316,21 @@ func resolveBackend(input string) (string, error) {
 	default:
 		return "", fmt.Errorf("unknown backend %q", input)
 	}
+}
+
+func clampFloat(v, minVal, maxVal float64) float64 {
+	if v < minVal {
+		return minVal
+	}
+	if v > maxVal {
+		return maxVal
+	}
+	return v
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

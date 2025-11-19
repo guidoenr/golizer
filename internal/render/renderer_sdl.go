@@ -109,19 +109,47 @@ func (r *Renderer) renderSDL(p params.Parameters, feat analyzer.Features, fps fl
 	height := r.height
 	pitch := state.pitch
 
-	for y := 0; y < height; y++ {
-		vy := yCoords[y] * scale
-		rowOffset := y * pitch
-		for x := 0; x < width; x++ {
-			vx := xCoords[x] * scale
-			index := y*width + x
+	downsample := r.downsample
+	if downsample < 1 {
+		downsample = 1
+	}
+
+	for y := 0; y < height; y += downsample {
+		sampleY := y + downsample/2
+		if sampleY >= height {
+			sampleY = height - 1
+		}
+		vy := yCoords[sampleY] * scale
+		yEnd := y + downsample
+		if yEnd > height {
+			yEnd = height
+		}
+		for x := 0; x < width; x += downsample {
+			sampleX := x + downsample/2
+			if sampleX >= width {
+				sampleX = width - 1
+			}
+			vx := xCoords[sampleX] * scale
+			index := sampleY*width + sampleX
 			res := r.evaluatePixel(vx, vy, p, ctx, feat, activation, noiseWarp, noiseDetail, index)
 			rr, gg, bb := hsvToRGB(res.h, res.s, res.v)
-			offset := rowOffset + x*4
-			state.pixelBuffer[offset+0] = byte(clampFloat(rr*255, 0, 255))
-			state.pixelBuffer[offset+1] = byte(clampFloat(gg*255, 0, 255))
-			state.pixelBuffer[offset+2] = byte(clampFloat(bb*255, 0, 255))
-			state.pixelBuffer[offset+3] = 255
+			rByte := byte(clampFloat(rr*255, 0, 255))
+			gByte := byte(clampFloat(gg*255, 0, 255))
+			bByte := byte(clampFloat(bb*255, 0, 255))
+			xEnd := x + downsample
+			if xEnd > width {
+				xEnd = width
+			}
+			for fy := y; fy < yEnd; fy++ {
+				rowOffset := fy * pitch
+				for fx := x; fx < xEnd; fx++ {
+					offset := rowOffset + fx*4
+					state.pixelBuffer[offset+0] = rByte
+					state.pixelBuffer[offset+1] = gByte
+					state.pixelBuffer[offset+2] = bByte
+					state.pixelBuffer[offset+3] = 255
+				}
+			}
 		}
 	}
 
