@@ -183,7 +183,7 @@ func patternSpiral(x, y float64, p params.Parameters, t float64) float64 {
 // Pulse - pulsos concéntricos desde el centro
 func patternPulse(x, y float64, p params.Parameters, t float64) float64 {
 	r := math.Hypot(x, y)
-	beat := p.Beat * 3.0
+	beat := p.BeatDistortion * 3.0
 	pulse := math.Sin((r-t*1.5)*math.Max(4.0, p.Frequency*0.7) + beat)
 	fade := math.Exp(-r * 0.5)
 	return pulse * (0.6 + fade*0.4)
@@ -195,7 +195,7 @@ func patternVortex(x, y float64, p params.Parameters, t float64) float64 {
 	theta := math.Atan2(y, x)
 	twist := r * 2.0
 	rotation := theta*4.0 + twist - t*1.8
-	wave := math.Sin(rotation + p.Beat*2.0)
+	wave := math.Sin(rotation + p.BeatDistortion*2.0)
 	depth := math.Sin(r*3.0 - t) * 0.4
 	return wave*0.7 + depth
 }
@@ -204,7 +204,7 @@ func patternVortex(x, y float64, p params.Parameters, t float64) float64 {
 func patternFrequency(x, y float64, p params.Parameters, t float64) float64 {
 	bands := math.Sin(x * math.Max(8.0, p.Frequency*1.2))
 	modulation := math.Sin((y + t*0.6) * 3.0) * 0.3
-	pulse := p.Beat * 0.8
+	pulse := p.Amplitude * 0.5
 	return (bands + modulation + pulse) * 0.8
 }
 
