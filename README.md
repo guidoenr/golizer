@@ -1,10 +1,13 @@
 # golizer
-https://github.com/user-attachments/assets/d6cabc5b-8964-438b-991c-7e50564962c3
+
+https://github.com/user-attachments/assets/3036c1f3-927f-493b-ad39-41aec2f9efa1
+
+<img width="1008" height="598" alt="status_bar" src="https://github.com/user-attachments/assets/9de11cfc-8554-4de9-ac99-648d53d60185" />
+
+
 > the setup showed in video is: Raspberry Pi4 Model B, with a Mic plugged in and a HDMI port to my TV
 
 > the raspberry is running the `golizer` binary and listening to a analog sound system
-
-
 
 real-time audio visualizer for the terminal. optimized for raspberry pi 4 and debian, runs smooth at 80+ fps with neon colors and minimal patterns.
 this exists because of [this](https://github.com/yuri-xyz/chroma/issues/14)
@@ -96,6 +99,8 @@ the script auto-detects your architecture and builds the right binary:
 ## web control panel
 
 golizer includes a full web interface to control everything from your phone or any device on your local network.
+
+if you click on `status bar`, 
 
 ### web server (automatic)
 
