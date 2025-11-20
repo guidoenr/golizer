@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -90,6 +91,13 @@ type App struct {
 	lastSizeCheck   time.Time
 	sizeCheckEvery  time.Duration
 	analysisSamples int
+	tempPath        string
+	tempCheckEvery  time.Duration
+	lastTempSample  time.Time
+	lastTempC       float64
+	hasTemp         bool
+	lastThrottle    string
+	panelURL        string
 }
 
 // New constructs the application using the provided configuration.
@@ -133,6 +141,11 @@ func New(cfg Config) (*App, error) {
 		return nil, err
 	}
 
+	tempPath := strings.TrimSpace(os.Getenv("GOLIZER_TEMP_PATH"))
+	if tempPath == "" {
+		tempPath = "/sys/class/thermal/thermal_zone0/temp"
+	}
+
 	app := &App{
 		cfg:             cfg,
 		params:          params.Defaults(),
@@ -149,9 +162,12 @@ func New(cfg Config) (*App, error) {
 		colorOptions:    render.ColorModeNames(),
 		sizeCheckEvery:  250 * time.Millisecond,
 		analysisSamples: selectAnalysisWindow(cfg.BufferSize),
+		tempPath:        tempPath,
+		tempCheckEvery:  5 * time.Second,
 	}
 	app.lastSizeCheck = time.Now()
 	app.lastRandom = time.Now()
+	app.panelURL = detectPanelURL()
 	app.windowMode = renderer.IsWindowed()
 	if app.windowMode {
 		app.cfg.ShowStatusBar = false
@@ -382,7 +398,7 @@ func (a *App) step() error {
 	a.currentLines = a.currentLines[:0]
 	a.currentLines = append(a.currentLines, frame.Lines...)
 	if a.cfg.ShowStatusBar {
-		a.currentLines = append(a.currentLines, statusBar(statusText, a.width))
+		a.overlayStatusLines(a.buildStatusLines(statusText, fps))
 	}
 
 	// ensure previous lines slice has capacity
@@ -565,15 +581,91 @@ func (a *App) maybeAutoRandomize() {
 	a.randomizeVisuals()
 }
 
-func statusBar(text string, width int) string {
+func (a *App) buildStatusLines(raw string, fps float64) []string {
+	width := a.width
+	temp, throttle := a.systemStats()
+
+	entries := []statusEntry{
+		{label: "PANEL", value: a.panelURL},
+		{label: "TEMP", value: temp},
+		{label: "THROTTLE", value: throttle},
+		{label: "FPS", value: fmt.Sprintf("%.1f", fps)},
+	}
+
+	parts := strings.Split(raw, "|")
+	if len(parts) > 0 {
+		mode := strings.TrimSpace(parts[0])
+		if mode != "" {
+			entries = append(entries, statusEntry{label: "MODE", value: strings.ToUpper(mode)})
+		}
+	}
+	if len(parts) > 1 {
+		entries = append(entries, parseKeyValuePart(parts[1])...)
+	}
+	if len(parts) > 2 {
+		entries = append(entries, parseMetricPart(parts[2])...)
+	}
+
+	lines := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.value == "" {
+			continue
+		}
+		lines = append(lines, padLine(formatStatusEntry(entry), width))
+	}
+	return lines
+}
+
+func (a *App) overlayStatusLines(lines []string) {
+	if len(lines) == 0 || len(a.currentLines) == 0 {
+		return
+	}
+	limit := len(lines)
+	if limit > len(a.currentLines) {
+		limit = len(a.currentLines)
+	}
+	for i := 0; i < limit; i++ {
+		a.currentLines[i] = padLine(lines[i], a.width)
+	}
+}
+
+func (a *App) systemStats() (string, string) {
+	if a.tempPath != "" {
+		now := time.Now()
+		if now.Sub(a.lastTempSample) >= a.tempCheckEvery {
+			if temp, throttle, err := readSystemStats(a.tempPath); err == nil {
+				a.lastTempC = temp
+				a.lastThrottle = throttle
+				a.hasTemp = true
+			} else {
+				a.hasTemp = false
+				a.lastThrottle = ""
+			}
+			a.lastTempSample = now
+		}
+	}
+
+	temp := "-- °C"
+	if a.hasTemp {
+		temp = fmt.Sprintf("%.1f°C", a.lastTempC)
+	}
+
+	throttle := a.lastThrottle
+	if throttle == "" {
+		throttle = "NORMAL"
+	}
+
+	return temp, throttle
+}
+
+func padLine(text string, width int) string {
 	if width <= 0 {
 		return text
 	}
 	if len(text) >= width {
 		return text[:width]
 	}
-	padding := width - len(text)
-	return text + strings.Repeat(" ", padding)
+	return text + strings.Repeat(" ", width-len(text))
 }
 
 func clearScreen() {
@@ -636,6 +728,163 @@ func selectAnalysisWindow(bufferSize int) int {
 		window = 2048
 	}
 	return window
+}
+
+func readSystemStats(tempPath string) (float64, string, error) {
+	data, err := os.ReadFile(tempPath)
+	if err != nil {
+		return 0, "", err
+	}
+	value, err := strconv.ParseFloat(strings.TrimSpace(string(data)), 64)
+	if err != nil {
+		return 0, "", err
+	}
+
+	throttle := readThrottleStatus()
+	return value / 1000.0, throttle, nil
+}
+
+func readThrottleStatus() string {
+	data, err := os.ReadFile("/sys/devices/platform/soc/soc:firmware/get_throttled")
+	if err != nil {
+		return ""
+	}
+
+	raw := strings.TrimSpace(string(data))
+	if raw == "" {
+		return ""
+	}
+
+	value, err := strconv.ParseUint(raw, 0, 64)
+	if err != nil {
+		value, err = strconv.ParseUint(raw, 16, 64)
+		if err != nil {
+			return ""
+		}
+	}
+
+	if value == 0 {
+		return "NORMAL"
+	}
+
+	flags := []string{}
+	if value&0x1 != 0 {
+		flags = append(flags, "UNDER-VOLTAGE")
+	}
+	if value&0x2 != 0 {
+		flags = append(flags, "ARM CAPPED")
+	}
+	if value&0x4 != 0 {
+		flags = append(flags, "THROTTLED")
+	}
+	if value&0x10000 != 0 {
+		flags = append(flags, "WAS UNDERVOLTED")
+	}
+	if value&0x20000 != 0 {
+		flags = append(flags, "WAS CAPPED")
+	}
+	if value&0x40000 != 0 {
+		flags = append(flags, "WAS THROTTLED")
+	}
+	if len(flags) == 0 {
+		return "NORMAL"
+	}
+	return strings.Join(flags, ", ")
+}
+
+type statusEntry struct {
+	label string
+	value string
+}
+
+const (
+	statusLabelColor = "\x1b[38;5;213m"
+	statusValueColor = "\x1b[38;5;250m"
+)
+
+func formatStatusEntry(entry statusEntry) string {
+	label := fmt.Sprintf("%s%-10s\x1b[0m", statusLabelColor, entry.label)
+	value := fmt.Sprintf("%s%s\x1b[0m", statusValueColor, entry.value)
+	return label + " " + value
+}
+
+func parseKeyValuePart(part string) []statusEntry {
+	tokens := strings.Fields(part)
+	entries := make([]statusEntry, 0, len(tokens))
+	for _, token := range tokens {
+		if !strings.Contains(token, "=") {
+			continue
+		}
+		segments := strings.SplitN(token, "=", 2)
+		if len(segments) != 2 {
+			continue
+		}
+		label := strings.ToUpper(strings.ReplaceAll(segments[0], "_", " "))
+		value := segments[1]
+		if label == "" || value == "" {
+			continue
+		}
+		entries = append(entries, statusEntry{label: label, value: value})
+	}
+	return entries
+}
+
+func parseMetricPart(part string) []statusEntry {
+	tokens := strings.Fields(part)
+	entries := make([]statusEntry, 0, len(tokens)/2)
+	for i := 0; i+1 < len(tokens); i += 2 {
+		label := strings.ToUpper(tokens[i])
+		if label == "FPS" {
+			continue
+		}
+		entries = append(entries, statusEntry{label: label, value: tokens[i+1]})
+	}
+	return entries
+}
+
+func detectPanelURL() string {
+	if env := strings.TrimSpace(os.Getenv("GOLIZER_PANEL_URL")); env != "" {
+		return env
+	}
+
+	port := 8080
+	if env := strings.TrimSpace(os.Getenv("GOLIZER_WEB_PORT")); env != "" {
+		if p, err := strconv.Atoi(env); err == nil && p > 0 {
+			port = p
+		}
+	}
+
+	ip := firstLocalIP()
+	if ip == "" {
+		ip = "golizer.local"
+	}
+	return fmt.Sprintf("http://%s:%d", ip, port)
+}
+
+func firstLocalIP() string {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return ""
+	}
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, addr := range addrs {
+			ipNet, ok := addr.(*net.IPNet)
+			if !ok || ipNet.IP.IsLoopback() {
+				continue
+			}
+			if ip4 := ipNet.IP.To4(); ip4 != nil {
+				return ip4.String()
+			}
+		}
+	}
+	return ""
 }
 
 // GetParams returns current parameters (thread-safe)
