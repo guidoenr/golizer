@@ -57,6 +57,17 @@ var qualityModeNames = []string{
 	string(qualityEco),
 }
 
+func determineWorkerCount() int {
+	workers := runtime.GOMAXPROCS(0) / 2
+	if workers < 1 {
+		workers = 1
+	}
+	if workers > 4 {
+		workers = 4
+	}
+	return workers
+}
+
 // ColorModeNames returns the supported color modes.
 func ColorModeNames() []string {
 	out := make([]string, len(colorModeNames))
@@ -122,6 +133,7 @@ type Renderer struct {
 	fullscreen    bool
 	webPanelURL   string
 	showWebURL    bool
+	workerCount   int
 }
 
 // Frame contains the rendered ASCII lines and optional status text.
@@ -160,10 +172,11 @@ func NewWithBackend(backend Backend, width, height int, paletteName, patternName
 	}
 
 	r := &Renderer{
-		width:      width,
-		height:     height,
-		scale:      1.0,
-		downsample: 1,
+		width:       width,
+		height:      height,
+		scale:       1.0,
+		downsample:  1,
+		workerCount: determineWorkerCount(),
 	}
 
 	if backend == BackendSDL {
@@ -335,73 +348,54 @@ func (r *Renderer) Render(p params.Parameters, feat analyzer.Features, fps float
 
 	lines := make([]string, r.height)
 
-	// fewer workers = less overhead (better for pi)
-	numWorkers := runtime.GOMAXPROCS(0) / 2
+	numWorkers := r.workerCount
 	if numWorkers < 1 {
 		numWorkers = 1
-	}
-	if numWorkers > 4 {
-		numWorkers = 4
 	}
 	if numWorkers > height {
 		numWorkers = height
 	}
 
-	// larger tiles = less sync overhead
-	tileHeight := 8
-	if tileHeight > height {
-		tileHeight = height
-	}
-	tileCount := (height + tileHeight - 1) / tileHeight
-
-	type tile struct {
-		start int
-		end   int
-	}
-
-	jobCh := make(chan tile, tileCount)
+	rowsPerWorker := (height + numWorkers - 1) / numWorkers
 	var wg sync.WaitGroup
 
 	for w := 0; w < numWorkers; w++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			var builder strings.Builder
-			builder.Grow(width * 8)
-			for t := range jobCh {
-				for y := t.start; y < t.end; y++ {
-					builder.Reset()
-					lastColor := -1
-					vy := yCoords[y] * scale
-					for x := 0; x < width; x++ {
-						vx := xCoords[x] * scale
-						index := y*width + x
-						char, fg := r.samplePixel(vx, vy, p, frameCtx, feat, activation, noiseWarp, noiseDetail, index)
-						if useANSI {
-							if fg != lastColor {
-								builder.WriteString(colorCode(fg))
-								lastColor = fg
-							}
-						}
-						builder.WriteRune(char)
-					}
-					if useANSI {
-						builder.WriteString(resetANSI)
-					}
-					lines[y] = builder.String()
-				}
-			}
-		}()
-	}
-
-	for start := 0; start < height; start += tileHeight {
-		end := start + tileHeight
+		start := w * rowsPerWorker
+		if start >= height {
+			break
+		}
+		end := start + rowsPerWorker
 		if end > height {
 			end = height
 		}
-		jobCh <- tile{start: start, end: end}
+
+		wg.Add(1)
+		go func(start, end int) {
+			defer wg.Done()
+			var builder strings.Builder
+			builder.Grow(width * 8)
+			for y := start; y < end; y++ {
+				builder.Reset()
+				lastColor := -1
+				vy := yCoords[y] * scale
+				for x := 0; x < width; x++ {
+					vx := xCoords[x] * scale
+					index := y*width + x
+					char, fg := r.samplePixel(vx, vy, p, frameCtx, feat, activation, noiseWarp, noiseDetail, index)
+					if useANSI && fg != lastColor {
+						builder.WriteString(colorCode(fg))
+						lastColor = fg
+					}
+					builder.WriteRune(char)
+				}
+				if useANSI {
+					builder.WriteString(resetANSI)
+				}
+				lines[y] = builder.String()
+			}
+		}(start, end)
 	}
-	close(jobCh)
+
 	wg.Wait()
 
 	status := r.buildStatus(feat, fps)
@@ -602,7 +596,7 @@ func (r *Renderer) colorFromMode(base, brightness float64, p params.Parameters, 
 		v = clamp01(brightness)
 	default:
 		// neon colors only (red, cyan, blue, violet, pink)
-		hueBase := math.Mod(shift + baseNorm*0.35, 1.0)
+		hueBase := math.Mod(shift+baseNorm*0.35, 1.0)
 		h = hueBase
 		if hueBase < 0.5 {
 			h = hueBase * 0.6
@@ -763,13 +757,13 @@ func (r *Renderer) buildStatus(feat analyzer.Features, fps float64) string {
 	builder := &r.statusBuilder
 	builder.Reset()
 	builder.Grow(256)
-	
+
 	// show web panel URL at the start if enabled
 	if r.showWebURL && r.webPanelURL != "" {
 		builder.WriteString(r.webPanelURL)
 		builder.WriteString(" | ")
 	}
-	
+
 	builder.WriteString(colorModeLabel(r.colorMode))
 	builder.WriteString(" | palette=")
 	builder.WriteString(r.paletteName)
@@ -792,8 +786,6 @@ func (r *Renderer) buildStatus(feat analyzer.Features, fps float64) string {
 	appendFloat(builder, fps, 1)
 	return builder.String()
 }
-
-
 
 func colorModeLabel(mode colorMode) string {
 	switch mode {

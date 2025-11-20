@@ -7,6 +7,7 @@ import (
 	"log"
 	"math/rand"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -53,39 +54,42 @@ const (
 
 // App ties together audio capture, analysis, and rendering.
 type App struct {
-	mu             sync.RWMutex
-	cfg            Config
-	params         params.Parameters
-	renderer       *render.Renderer
-	capture        *audio.Capture
-	analyzer       *analyzer.Analyzer
-	fake           *fakeGenerator
-	last           time.Time
-	log            *log.Logger
-	deviceLabel    string
-	width          int
-	height         int
-	renderHeight   int
-	inputEvents    chan inputEvent
-	rng            *rand.Rand
-	paletteOptions []string
-	patternOptions []string
-	colorOptions   []string
-	autoRandomize  bool
-	randomInterval time.Duration
-	lastRandom     time.Time
-	sampleBuffer   []float32
-	frameBuffer    strings.Builder
-	prevLines      []string
-	currentLines   []string
-	profiler       *profiler
-	windowMode     bool
-	frameStride    int
-	skipCounter    int
-	frameScale     float64
-	fullscreen     bool
-	lastFeatures   analyzer.Features
-	lastFPS        float64
+	mu              sync.RWMutex
+	cfg             Config
+	params          params.Parameters
+	renderer        *render.Renderer
+	capture         *audio.Capture
+	analyzer        *analyzer.Analyzer
+	fake            *fakeGenerator
+	last            time.Time
+	log             *log.Logger
+	deviceLabel     string
+	width           int
+	height          int
+	renderHeight    int
+	inputEvents     chan inputEvent
+	rng             *rand.Rand
+	paletteOptions  []string
+	patternOptions  []string
+	colorOptions    []string
+	autoRandomize   bool
+	randomInterval  time.Duration
+	lastRandom      time.Time
+	sampleBuffer    []float32
+	frameBuffer     strings.Builder
+	prevLines       []string
+	currentLines    []string
+	profiler        *profiler
+	windowMode      bool
+	frameStride     int
+	skipCounter     int
+	frameScale      float64
+	fullscreen      bool
+	lastFeatures    analyzer.Features
+	lastFPS         float64
+	lastSizeCheck   time.Time
+	sizeCheckEvery  time.Duration
+	analysisSamples int
 }
 
 // New constructs the application using the provided configuration.
@@ -130,20 +134,23 @@ func New(cfg Config) (*App, error) {
 	}
 
 	app := &App{
-		cfg:            cfg,
-		params:         params.Defaults(),
-		renderer:       renderer,
-		log:            cfg.Log,
-		width:          cfg.Width,
-		height:         cfg.Height,
-		renderHeight:   renderHeight,
-		autoRandomize:  cfg.AutoRandomize,
-		randomInterval: cfg.RandomInterval,
-		rng:            rand.New(rand.NewSource(time.Now().UnixNano())),
-		paletteOptions: render.PaletteNames(),
-		patternOptions: render.PatternNames(),
-		colorOptions:   render.ColorModeNames(),
+		cfg:             cfg,
+		params:          params.Defaults(),
+		renderer:        renderer,
+		log:             cfg.Log,
+		width:           cfg.Width,
+		height:          cfg.Height,
+		renderHeight:    renderHeight,
+		autoRandomize:   cfg.AutoRandomize,
+		randomInterval:  cfg.RandomInterval,
+		rng:             rand.New(rand.NewSource(time.Now().UnixNano())),
+		paletteOptions:  render.PaletteNames(),
+		patternOptions:  render.PatternNames(),
+		colorOptions:    render.ColorModeNames(),
+		sizeCheckEvery:  250 * time.Millisecond,
+		analysisSamples: selectAnalysisWindow(cfg.BufferSize),
 	}
+	app.lastSizeCheck = time.Now()
 	app.lastRandom = time.Now()
 	app.windowMode = renderer.IsWindowed()
 	if app.windowMode {
@@ -312,10 +319,14 @@ func (a *App) step() error {
 			a.profiler.markSection("capture")
 		}
 		a.sampleBuffer = a.capture.SamplesInto(a.sampleBuffer)
+		samples := a.sampleBuffer
+		if a.analysisSamples > 0 && len(samples) > a.analysisSamples {
+			samples = samples[len(samples)-a.analysisSamples:]
+		}
 		if a.profiler != nil {
 			a.profiler.markSection("analyze")
 		}
-		features = a.analyzer.Analyze(a.sampleBuffer, delta)
+		features = a.analyzer.Analyze(samples, delta)
 		if a.cfg.NoiseFloor > 0 {
 			features = analyzer.GateFeatures(features, a.cfg.NoiseFloor)
 		}
@@ -387,14 +398,15 @@ func (a *App) step() error {
 		if idx < len(a.prevLines) && a.prevLines[idx] == line {
 			continue
 		}
-		fmt.Fprintf(&a.frameBuffer, "\x1b[%d;1H", idx+1)
+		appendCursorMove(&a.frameBuffer, idx+1)
 		a.frameBuffer.WriteString(line)
 		a.frameBuffer.WriteString("\x1b[K")
 	}
 
 	if len(a.currentLines) < len(a.prevLines) {
 		for idx := len(a.currentLines); idx < len(a.prevLines); idx++ {
-			fmt.Fprintf(&a.frameBuffer, "\x1b[%d;1H\x1b[K", idx+1)
+			appendCursorMove(&a.frameBuffer, idx+1)
+			a.frameBuffer.WriteString("\x1b[K")
 		}
 	}
 
@@ -423,6 +435,15 @@ func (a *App) ensureDimensions() {
 	if a.windowMode {
 		return
 	}
+
+	if a.sizeCheckEvery > 0 {
+		now := time.Now()
+		if now.Sub(a.lastSizeCheck) < a.sizeCheckEvery {
+			return
+		}
+		a.lastSizeCheck = now
+	}
+
 	fd := int(os.Stdout.Fd())
 	if fd < 0 {
 		return
@@ -595,6 +616,26 @@ func pickRandom(options []string, current string, rng *rand.Rand) string {
 		}
 	}
 	return options[rng.Intn(len(options))]
+}
+
+func appendCursorMove(builder *strings.Builder, row int) {
+	builder.WriteString("\x1b[")
+	builder.WriteString(strconv.Itoa(row))
+	builder.WriteString(";1H")
+}
+
+func selectAnalysisWindow(bufferSize int) int {
+	if bufferSize <= 0 {
+		bufferSize = 4096
+	}
+	window := bufferSize / 4
+	if window < 256 {
+		window = 256
+	}
+	if window > 2048 {
+		window = 2048
+	}
+	return window
 }
 
 // GetParams returns current parameters (thread-safe)
