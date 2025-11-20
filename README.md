@@ -1,22 +1,13 @@
 # golizer
 
+a CPU-based audio reactive visualizer written in go. started as a port of [Chroma](https://github.com/yuri-xyz/chroma) but ended up being its own thing.
+this exists because of [this](https://github.com/yuri-xyz/chroma/issues/14)
+
+captures audio via portaudio, does fft analysis for bass/mid/treble, detects kicks and drops, then renders sick ascii visuals that react to the music in real-time.
+
 https://github.com/user-attachments/assets/3036c1f3-927f-493b-ad39-41aec2f9efa1
 
 <img width="1008" height="598" alt="status_bar" src="https://github.com/user-attachments/assets/9de11cfc-8554-4de9-ac99-648d53d60185" />
-
-
-> the setup showed in video is: Raspberry Pi4 Model B, with a Mic plugged in and a HDMI port to my TV
-
-> the raspberry is running the `golizer` binary and listening to a analog sound system
-
-real-time audio visualizer for the terminal. optimized for raspberry pi 4 and debian, runs smooth at 80+ fps with neon colors and minimal patterns.
-this exists because of [this](https://github.com/yuri-xyz/chroma/issues/14)
-
-## what is this
-
-cpu-based audio reactive visualizer written in go. started as a port of [Chroma](https://github.com/yuri-xyz/chroma) but ended up being its own thing - faster, lighter, and way more trippy for electronic music.
-
-captures audio via portaudio, does fft analysis for bass/mid/treble, detects kicks and drops, then renders sick ascii visuals that react to the music in real-time.
 
 ## features
 
