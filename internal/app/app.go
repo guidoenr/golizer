@@ -254,6 +254,9 @@ func (a *App) Run(ctx context.Context) error {
 	defer cancelInput()
 	a.startInputListener(inputCtx)
 	a.ensureDimensions()
+	if a.panelURL == "" {
+		a.panelURL = detectPanelURL()
+	}
 
 	for {
 		select {
