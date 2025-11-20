@@ -7,6 +7,10 @@ captures audio via portaudio, does fft analysis for bass/mid/treble, detects kic
 
 https://github.com/user-attachments/assets/3036c1f3-927f-493b-ad39-41aec2f9efa1
 
+
+https://github.com/user-attachments/assets/2e07da00-e067-4e59-9a78-bd479d8948fe
+
+
 <img width="1008" height="598" alt="status_bar" src="https://github.com/user-attachments/assets/9de11cfc-8554-4de9-ac99-648d53d60185" />
 
 ## features
