@@ -92,10 +92,10 @@ the script auto-detects your architecture and builds the right binary:
 ```
 
 ## web control panel
-
 golizer includes a full web interface to control everything from your phone or any device on your local network.
 
-if you click on `status bar`, 
+<img width="1459" height="920" alt="image" src="https://github.com/user-attachments/assets/08a2e4a8-7a64-4d77-a765-be12aedc345b" />
+
 
 ### web server (automatic)
 
