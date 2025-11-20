@@ -73,7 +73,6 @@ the script auto-detects your architecture and builds the right binary:
 --palette auto                 # auto|default|box|lines|spark|retro|minimal|block|bubble
 --pattern auto                 # auto|flash|spark|scatter|beam|ripple|laser|orbit|explosion|rings|zigzag|cross|spiral|star|tunnel|neurons|fractal
 --color-mode chromatic         # chromatic|fire|aurora|mono
---color-on-audio               # fade from black to neon based on audio
 
 # randomization
 --auto-randomize               # enable auto pattern switching

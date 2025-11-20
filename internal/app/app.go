@@ -31,7 +31,6 @@ type Config struct {
 	Palette        string
 	Pattern        string
 	ColorMode      string
-	ColorOnAudio   bool
 	UseANSI        bool
 	Quality        string
 	AutoRandomize  bool
@@ -69,7 +68,6 @@ type App struct {
 	renderHeight   int
 	inputEvents    chan inputEvent
 	rng            *rand.Rand
-	colorOnAudio   bool
 	paletteOptions []string
 	patternOptions []string
 	colorOptions   []string
@@ -126,7 +124,7 @@ func New(cfg Config) (*App, error) {
 		return nil, fmt.Errorf("unknown render backend %q", cfg.Backend)
 	}
 
-	renderer, err := render.NewWithBackend(backend, cfg.Width, renderHeight, cfg.Palette, cfg.Pattern, cfg.ColorMode, cfg.Quality, cfg.ColorOnAudio, cfg.UseANSI)
+	renderer, err := render.NewWithBackend(backend, cfg.Width, renderHeight, cfg.Palette, cfg.Pattern, cfg.ColorMode, cfg.Quality, true, cfg.UseANSI)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +137,6 @@ func New(cfg Config) (*App, error) {
 		width:          cfg.Width,
 		height:         cfg.Height,
 		renderHeight:   renderHeight,
-		colorOnAudio:   cfg.ColorOnAudio,
 		autoRandomize:  cfg.AutoRandomize,
 		randomInterval: cfg.RandomInterval,
 		rng:            rand.New(rand.NewSource(time.Now().UnixNano())),
@@ -147,6 +144,7 @@ func New(cfg Config) (*App, error) {
 		patternOptions: render.PatternNames(),
 		colorOptions:   render.ColorModeNames(),
 	}
+	app.lastRandom = time.Now()
 	app.windowMode = renderer.IsWindowed()
 	if app.windowMode {
 		app.cfg.ShowStatusBar = false
@@ -216,16 +214,6 @@ func (a *App) Run(ctx context.Context) error {
 	ticker := time.NewTicker(frameDuration)
 	defer ticker.Stop()
 
-	var (
-		randomTicker *time.Ticker
-		randomCh     <-chan time.Time
-	)
-	if a.autoRandomize {
-		randomTicker = time.NewTicker(a.randomInterval)
-		randomCh = randomTicker.C
-		defer randomTicker.Stop()
-	}
-
 	if !a.windowMode {
 		enterAltScreen()
 		clearScreen()
@@ -273,8 +261,6 @@ func (a *App) Run(ctx context.Context) error {
 				}
 				return nil
 			}
-		case <-randomCh:
-			a.randomizeVisuals()
 		case <-ticker.C:
 			if err := a.step(); err != nil {
 				if errors.Is(err, render.ErrRendererQuit) {
@@ -282,6 +268,7 @@ func (a *App) Run(ctx context.Context) error {
 				}
 				return err
 			}
+			a.maybeAutoRandomize()
 		}
 	}
 }
@@ -293,7 +280,7 @@ func (a *App) Close() error {
 	}
 	var firstErr error
 	if a.renderer != nil {
-		if err := a.renderer.Close(); err != nil && firstErr == nil {
+		if err := a.renderer.Close(); err != nil {
 			firstErr = err
 		}
 	}
@@ -343,7 +330,7 @@ func (a *App) step() error {
 	a.params.UpdateTime(delta)
 
 	fps := 1.0 / delta
-	
+
 	// update last features and fps for web server
 	a.mu.Lock()
 	a.lastFeatures = features
@@ -362,7 +349,7 @@ func (a *App) step() error {
 
 	frame := a.renderer.Render(a.params, features, fps)
 	statusText := frame.Status
-	if a.deviceLabel != "" && a.cfg.DisableAudio == false {
+	if a.deviceLabel != "" && !a.cfg.DisableAudio {
 		statusText = fmt.Sprintf("%s | mic=%s", statusText, a.deviceLabel)
 	}
 
@@ -526,11 +513,35 @@ func (a *App) randomizeVisuals() {
 	pattern := pickRandom(a.patternOptions, a.renderer.PatternName(), a.rng)
 	color := pickRandom(a.colorOptions, a.renderer.ColorModeName(), a.rng)
 
-	a.renderer.Configure(palette, pattern, color, a.colorOnAudio)
+	a.renderer.Configure(palette, pattern, color, true)
 	a.params.Pattern = pattern
 	a.params.ColorMode = color
 
-	a.log.Printf("Randomize visuals -> palette=%s pattern=%s color=%s", palette, pattern, color)
+	// commented out for now
+	//a.log.Printf("Randomize visuals -> palette=%s pattern=%s color=%s", palette, pattern, color)
+	a.mu.Lock()
+	a.lastRandom = time.Now()
+	a.mu.Unlock()
+}
+
+func (a *App) maybeAutoRandomize() {
+	now := time.Now()
+
+	a.mu.Lock()
+	if !a.autoRandomize {
+		a.mu.Unlock()
+		return
+	}
+
+	if now.Sub(a.lastRandom) < a.randomInterval {
+		a.mu.Unlock()
+		return
+	}
+
+	a.lastRandom = now
+	a.mu.Unlock()
+
+	a.randomizeVisuals()
 }
 
 func statusBar(text string, width int) string {
@@ -631,6 +642,7 @@ type ConfigGetter interface {
 	Height() int
 	AutoRandomize() bool
 	RandomInterval() time.Duration
+	ShowStatusBar() bool
 }
 
 // GetConfig returns current configuration (thread-safe)
@@ -644,14 +656,15 @@ type configWrapper struct {
 	cfg Config
 }
 
-func (c *configWrapper) NoiseFloor() float64 { return c.cfg.NoiseFloor }
-func (c *configWrapper) BufferSize() int     { return c.cfg.BufferSize }
-func (c *configWrapper) TargetFPS() float64  { return c.cfg.TargetFPS }
-func (c *configWrapper) Quality() string     { return c.cfg.Quality }
-func (c *configWrapper) Width() int          { return c.cfg.Width }
-func (c *configWrapper) Height() int         { return c.cfg.Height }
-func (c *configWrapper) AutoRandomize() bool { return c.cfg.AutoRandomize }
+func (c *configWrapper) NoiseFloor() float64           { return c.cfg.NoiseFloor }
+func (c *configWrapper) BufferSize() int               { return c.cfg.BufferSize }
+func (c *configWrapper) TargetFPS() float64            { return c.cfg.TargetFPS }
+func (c *configWrapper) Quality() string               { return c.cfg.Quality }
+func (c *configWrapper) Width() int                    { return c.cfg.Width }
+func (c *configWrapper) Height() int                   { return c.cfg.Height }
+func (c *configWrapper) AutoRandomize() bool           { return c.cfg.AutoRandomize }
 func (c *configWrapper) RandomInterval() time.Duration { return c.cfg.RandomInterval }
+func (c *configWrapper) ShowStatusBar() bool           { return c.cfg.ShowStatusBar }
 
 // SetNoiseFloor updates noise floor (thread-safe)
 func (a *App) SetNoiseFloor(v float64) {
@@ -690,6 +703,34 @@ func (a *App) SetDimensions(width, height int) {
 	}
 	if a.renderer != nil {
 		a.renderer.Resize(width, a.renderHeight)
+	}
+}
+
+// SetShowStatusBar toggles the ASCII status bar (thread-safe)
+func (a *App) SetShowStatusBar(enabled bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.windowMode {
+		enabled = false
+	}
+
+	if a.cfg.ShowStatusBar == enabled {
+		return
+	}
+
+	a.cfg.ShowStatusBar = enabled
+
+	if a.windowMode {
+		return
+	}
+
+	a.renderHeight = a.height
+	if a.cfg.ShowStatusBar && a.renderHeight > 1 {
+		a.renderHeight--
+	}
+	if a.renderer != nil {
+		a.renderer.Resize(a.width, a.renderHeight)
 	}
 }
 

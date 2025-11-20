@@ -1,6 +1,7 @@
 let ws = null;
 let statusInterval = null;
 let updateTimeout = null;
+const STATUS_POLL_INTERVAL = 1500;
 
 // initialize
 document.addEventListener("DOMContentLoaded", () => {
@@ -74,6 +75,7 @@ function connectWebSocket() {
 
 	ws.onopen = () => {
 		updateConnectionStatus("connected");
+		stopStatusPolling();
 	};
 
 	ws.onmessage = (event) => {
@@ -87,10 +89,12 @@ function connectWebSocket() {
 
 	ws.onerror = () => {
 		updateConnectionStatus("disconnected");
+		startStatusPolling();
 	};
 
 	ws.onclose = () => {
 		updateConnectionStatus("disconnected");
+		startStatusPolling();
 		setTimeout(connectWebSocket, 2000);
 	};
 }
@@ -103,22 +107,30 @@ function updateConnectionStatus(status) {
 
 // status polling (fallback)
 function startStatusPolling() {
-	statusInterval = setInterval(async () => {
-		try {
-			const response = await fetch("/api/status");
-			const data = await response.json();
-			updateUI(data);
-		} catch (err) {
-			console.error("status poll failed:", err);
-		}
-	}, 500);
+	if (statusInterval) return;
+	statusInterval = setInterval(fetchStatusSnapshot, STATUS_POLL_INTERVAL);
+	fetchStatusSnapshot();
+}
+
+function stopStatusPolling() {
+	if (!statusInterval) return;
+	clearInterval(statusInterval);
+	statusInterval = null;
+}
+
+async function fetchStatusSnapshot() {
+	try {
+		const response = await fetch("/api/status");
+		const data = await response.json();
+		updateUI(data);
+	} catch (err) {
+		console.error("status poll failed:", err);
+	}
 }
 
 // update UI with data
 function updateUI(data) {
 	if (data.fps !== undefined) {
-		document.getElementById("fps").textContent = `${data.fps.toFixed(1)} fps`;
-		// also update performance section display
 		const fpsDisplay = document.getElementById("fps-display");
 		if (fpsDisplay) {
 			fpsDisplay.textContent = `${data.fps.toFixed(1)} fps`;
@@ -138,8 +150,17 @@ function updateUI(data) {
 		setSelectValue("pattern", data.renderer.pattern);
 		setSelectValue("palette", data.renderer.palette);
 		setSelectValue("colorMode", data.renderer.colorMode);
-		document.getElementById("colorOnAudio").checked =
-			data.renderer.colorOnAudio;
+	}
+
+	if (data.bufferSize !== undefined) {
+		setBufferSizeValue(data.bufferSize);
+	}
+
+	if (data.showStatusBar !== undefined) {
+		const statusToggle = document.getElementById("showStatusBar");
+		if (statusToggle) {
+			statusToggle.checked = data.showStatusBar;
+		}
 	}
 
 	if (data.quality) {
@@ -225,10 +246,13 @@ function setupControls() {
 		});
 	}
 
-	// colorOnAudio
-	document.getElementById("colorOnAudio").addEventListener("change", (e) => {
-		sendUpdate({ colorOnAudio: e.target.checked });
-	});
+	// showStatusBar
+	const showStatusBarToggle = document.getElementById("showStatusBar");
+	if (showStatusBarToggle) {
+		showStatusBarToggle.addEventListener("change", (e) => {
+			sendUpdate({ showStatusBar: e.target.checked });
+		});
+	}
 
 	// critical sliders that affect visuals directly - send immediately
 	const immediateSliders = [
@@ -246,7 +270,7 @@ function setupControls() {
 				if (valueSpan) {
 					valueSpan.textContent = e.target.value;
 				}
-				sendUpdate({}); // send immediately
+				sendParamUpdate(id, e.target.value);
 			});
 		}
 	});
@@ -262,7 +286,6 @@ function setupControls() {
 		"midInfluence",
 		"trebleInfluence",
 		"randomInterval",
-		"bufferSize",
 	];
 
 	sliders.forEach((id) => {
@@ -308,6 +331,18 @@ function setupControls() {
 
 	// save button
 	document.getElementById("saveBtn").addEventListener("click", saveConfig);
+
+	// buffer size selector
+	const bufferButtons = document.querySelectorAll(
+		"#bufferSize-options .option-btn"
+	);
+	bufferButtons.forEach((btn) => {
+		btn.addEventListener("click", () => {
+			const value = parseInt(btn.dataset.value, 10);
+			setBufferSizeValue(value);
+			sendUpdate({ bufferSize: value });
+		});
+	});
 }
 
 function saveConfig() {
@@ -330,7 +365,7 @@ function saveConfig() {
 		palette: getSelectedValue("palette-selector"),
 		pattern: getSelectedValue("pattern-selector"),
 		colorMode: getSelectedValue("colorMode-selector"),
-		colorOnAudio: document.getElementById("colorOnAudio").checked,
+		showStatusBar: document.getElementById("showStatusBar").checked,
 		noiseFloor: parseFloat(document.getElementById("noiseFloor").value),
 		bufferSize: parseInt(document.getElementById("bufferSize").value),
 		quality: getSelectedValue("quality-selector"),
@@ -394,75 +429,134 @@ function debouncedUpdate() {
 	updateTimeout = setTimeout(sendUpdate, 100); // reduced to 100ms for real-time feel
 }
 
-function sendUpdate(updates) {
-	const params = {};
+function sendUpdate(baseUpdates = null) {
+	const payload = baseUpdates ? { ...baseUpdates } : {};
+	const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
+	const isValidValue = (value) =>
+		value !== undefined &&
+		value !== null &&
+		!(typeof value === "number" && Number.isNaN(value));
 
-	// collect all param values
-	const paramIds = [
-		"frequency",
-		"amplitude",
-		"speed",
-		"brightness",
-		"contrast",
-		"saturation",
-		"beatSensitivity",
-		"bassInfluence",
-		"midInfluence",
-		"trebleInfluence",
-	];
+	if (!hasOwn(payload, "params")) {
+		const params = {};
+		const paramIds = [
+			"frequency",
+			"amplitude",
+			"speed",
+			"brightness",
+			"contrast",
+			"saturation",
+			"beatSensitivity",
+			"bassInfluence",
+			"midInfluence",
+			"trebleInfluence",
+		];
 
-	paramIds.forEach((id) => {
-		const input = document.getElementById(id);
-		if (input) {
-			const value = parseFloat(input.value);
-			const paramName = id.charAt(0).toUpperCase() + id.slice(1);
-			params[paramName] = value;
+		paramIds.forEach((id) => {
+			const input = document.getElementById(id);
+			if (input) {
+				const value = parseFloat(input.value);
+				if (!Number.isNaN(value)) {
+					const paramName = id.charAt(0).toUpperCase() + id.slice(1);
+					params[paramName] = value;
+				}
+			}
+		});
+
+		if (Object.keys(params).length > 0) {
+			payload.params = params;
 		}
+	}
+
+	const ensureConfigValue = (key, getter) => {
+		if (hasOwn(payload, key)) {
+			return;
+		}
+		const value = getter();
+		if (isValidValue(value)) {
+			payload[key] = value;
+		}
+	};
+
+	ensureConfigValue("noiseFloor", () => {
+		const nf = document.getElementById("noiseFloor");
+		return nf ? parseFloat(nf.value) : undefined;
 	});
 
-	// collect config values if not in updates
-	const config = {};
-	if (!updates.noiseFloor) {
-		const nf = document.getElementById("noiseFloor");
-		if (nf) config.noiseFloor = parseFloat(nf.value);
-	}
-	if (!updates.bufferSize) {
+	ensureConfigValue("bufferSize", () => {
 		const bs = document.getElementById("bufferSize");
-		if (bs) config.bufferSize = parseInt(bs.value);
-	}
-	if (!updates.quality) {
+		return bs ? parseInt(bs.value, 10) : undefined;
+	});
+
+	ensureConfigValue("quality", () => {
 		const q = document.getElementById("quality-selector");
 		if (q) {
 			const active = q.querySelector(".option-btn.active");
-			if (active) config.quality = active.dataset.value;
+			return active ? active.dataset.value : undefined;
 		}
-	}
-	if (!updates.width) {
+		return undefined;
+	});
+
+	ensureConfigValue("width", () => {
 		const w = document.getElementById("width");
-		if (w) config.width = parseInt(w.value);
-	}
-	if (!updates.height) {
+		return w ? parseInt(w.value, 10) : undefined;
+	});
+
+	ensureConfigValue("height", () => {
 		const h = document.getElementById("height");
-		if (h) config.height = parseInt(h.value);
-	}
-	if (!updates.autoRandomize) {
+		return h ? parseInt(h.value, 10) : undefined;
+	});
+
+	ensureConfigValue("autoRandomize", () => {
 		const ar = document.getElementById("autoRandomize");
-		if (ar) config.autoRandomize = ar.checked;
-	}
-	if (!updates.randomInterval) {
+		return ar ? ar.checked : undefined;
+	});
+
+	ensureConfigValue("randomInterval", () => {
 		const ri = document.getElementById("randomInterval");
-		if (ri) config.randomInterval = parseInt(ri.value);
-	}
+		return ri ? parseInt(ri.value, 10) : undefined;
+	});
 
-	const payload = {
-		...config,
-		...updates,
-		params: Object.keys(params).length > 0 ? params : undefined,
-	};
+	ensureConfigValue("showStatusBar", () => {
+		const sb = document.getElementById("showStatusBar");
+		return sb ? sb.checked : undefined;
+	});
 
+	postUpdatePayload(payload);
+}
+
+function sendParamUpdate(id, rawValue) {
+	const value = parseFloat(rawValue);
+	if (Number.isNaN(value)) return;
+	const paramName = id.charAt(0).toUpperCase() + id.slice(1);
+	postUpdatePayload({ params: { [paramName]: value } });
+}
+
+function postUpdatePayload(payload) {
 	fetch("/api/update", {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify(payload),
 	}).catch((err) => console.error("update failed:", err));
+}
+
+function setBufferSizeValue(value) {
+	const hiddenInput = document.getElementById("bufferSize");
+	if (hiddenInput) {
+		hiddenInput.value = value;
+	}
+
+	const valueDisplay = document.getElementById("bufferSizeValue");
+	if (valueDisplay) {
+		valueDisplay.textContent = value;
+	}
+
+	const buttons = document.querySelectorAll("#bufferSize-options .option-btn");
+	buttons.forEach((btn) => {
+		if (parseInt(btn.dataset.value, 10) === value) {
+			btn.classList.add("active");
+		} else {
+			btn.classList.remove("active");
+		}
+	});
 }

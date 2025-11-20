@@ -3,21 +3,48 @@
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>golizer control panel</title>
+		<title>github.com/guidoenr/golizer</title>
 		<link rel="stylesheet" href="/static/style.css" />
 	</head>
 	<body>
 		<div class="container">
 			<header>
-				<h1>LIBERTADOR MANSION VISUALS</h1>
+				<h1>golizer visuals (libertador-mansion)</h1>
 				<div class="status">
-					<span id="fps">-- fps</span>
 					<span id="connection" class="status-indicator">connecting...</span>
-					<button id="saveBtn" class="btn-save">💾 SAVE</button>
+					<button id="saveBtn" class="btn-save">SAVE</button>
 				</div>
 			</header>
 
 			<div class="grid">
+				<!-- Randomization Section -->
+				<section class="card">
+					<h2>RANDOMIZER</h2>
+					<div class="control-group">
+						<label>
+							<input type="checkbox" id="autoRandomize" checked />
+							randomize
+						</label>
+					</div>
+					<div class="control-group">
+						<label
+							>interval (seconds)
+							<span id="randomIntervalValue">10</span></label
+						>
+						<input
+							type="range"
+							id="randomInterval"
+							min="1"
+							max="60"
+							step="1"
+							value="10"
+						/>
+					</div>
+					<div class="control-group">
+						<button id="randomizeBtn" class="btn">randomize NOW</button>
+					</div>
+				</section>
+
 				<!-- Visuals Section -->
 				<section class="card">
 					<h2>visuals</h2>
@@ -33,11 +60,63 @@
 						<label>color mode</label>
 						<div id="colorMode-selector" class="option-grid"></div>
 					</div>
+				</section>
+
+				<!-- Beat Response Section -->
+				<section class="card">
+					<h2>beat response</h2>
 					<div class="control-group">
-						<label>
-							<input type="checkbox" id="colorOnAudio" />
-							color on audio
-						</label>
+						<label
+							>beat sensitivity
+							<span id="beatSensitivityValue">1.2</span></label
+						>
+						<input
+							type="range"
+							id="beatSensitivity"
+							min="0.5"
+							max="3"
+							step="0.1"
+							value="1.2"
+						/>
+					</div>
+					<div class="control-group">
+						<label
+							>BASS influence <span id="bassInfluenceValue">0.85</span></label
+						>
+						<input
+							type="range"
+							id="bassInfluence"
+							min="0"
+							max="2"
+							step="0.05"
+							value="0.85"
+						/>
+					</div>
+					<div class="control-group">
+						<label
+							>MID influence <span id="midInfluenceValue">0.25</span></label
+						>
+						<input
+							type="range"
+							id="midInfluence"
+							min="0"
+							max="2"
+							step="0.05"
+							value="0.25"
+						/>
+					</div>
+					<div class="control-group">
+						<label
+							>HIGH influence <span id="trebleInfluenceValue">0.15</span></label
+						>
+						<input
+							type="range"
+							id="trebleInfluence"
+							min="0"
+							max="2"
+							step="0.05"
+							value="0.15"
+						/>
 					</div>
 				</section>
 
@@ -56,15 +135,19 @@
 						/>
 					</div>
 					<div class="control-group">
-						<label>buffer size</label>
-						<input
-							type="number"
-							id="bufferSize"
-							min="256"
-							max="8192"
-							step="256"
-							value="2048"
-						/>
+						<label>buffer size <span id="bufferSizeValue">2048</span></label>
+						<div
+							id="bufferSize-options"
+							class="option-grid buffer-size-options"
+						>
+							<button class="option-btn" data-value="256">256</button>
+							<button class="option-btn" data-value="512">512</button>
+							<button class="option-btn" data-value="1024">1024</button>
+							<button class="option-btn active" data-value="2048">2048</button>
+							<button class="option-btn" data-value="4096">4096</button>
+							<button class="option-btn" data-value="8192">8192</button>
+						</div>
+						<input type="hidden" id="bufferSize" value="2048" />
 					</div>
 					<div class="audio-stats">
 						<div>Bass: <span id="bass">0.00</span></div>
@@ -86,7 +169,13 @@
 								>--</span
 							></label
 						>
-						<small>unlimited - each machine runs at max</small>
+						<small>unlimited</small>
+					</div>
+					<div class="control-group">
+						<label>
+							<input type="checkbox" id="showStatusBar" checked />
+							status bar
+						</label>
 					</div>
 					<div class="control-group">
 						<label>quality</label>
@@ -190,93 +279,6 @@
 							step="0.1"
 							value="0.9"
 						/>
-					</div>
-				</section>
-
-				<!-- Beat Response Section -->
-				<section class="card">
-					<h2>beat response</h2>
-					<div class="control-group">
-						<label
-							>beat sensitivity
-							<span id="beatSensitivityValue">1.2</span></label
-						>
-						<input
-							type="range"
-							id="beatSensitivity"
-							min="0.5"
-							max="3"
-							step="0.1"
-							value="1.2"
-						/>
-					</div>
-					<div class="control-group">
-						<label
-							>bass influence <span id="bassInfluenceValue">0.85</span></label
-						>
-						<input
-							type="range"
-							id="bassInfluence"
-							min="0"
-							max="2"
-							step="0.05"
-							value="0.85"
-						/>
-					</div>
-					<div class="control-group">
-						<label
-							>mid influence <span id="midInfluenceValue">0.25</span></label
-						>
-						<input
-							type="range"
-							id="midInfluence"
-							min="0"
-							max="2"
-							step="0.05"
-							value="0.25"
-						/>
-					</div>
-					<div class="control-group">
-						<label
-							>treble influence
-							<span id="trebleInfluenceValue">0.15</span></label
-						>
-						<input
-							type="range"
-							id="trebleInfluence"
-							min="0"
-							max="2"
-							step="0.05"
-							value="0.15"
-						/>
-					</div>
-				</section>
-
-				<!-- Randomization Section -->
-				<section class="card">
-					<h2>randomization</h2>
-					<div class="control-group">
-						<label>
-							<input type="checkbox" id="autoRandomize" checked />
-							auto randomize
-						</label>
-					</div>
-					<div class="control-group">
-						<label
-							>interval (seconds)
-							<span id="randomIntervalValue">10</span></label
-						>
-						<input
-							type="range"
-							id="randomInterval"
-							min="1"
-							max="60"
-							step="1"
-							value="10"
-						/>
-					</div>
-					<div class="control-group">
-						<button id="randomizeBtn" class="btn">randomize now</button>
 					</div>
 				</section>
 			</div>

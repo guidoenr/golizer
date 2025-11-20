@@ -39,7 +39,6 @@ func main() {
 		pattern    = flag.String("pattern", "auto", "Visual pattern (auto|flash|spark|scatter|beam|ripple|laser|orbit|explosion|rings|zigzag|cross|spiral|star|tunnel|neurons|fractal)")
 		colorMode  = flag.String("color-mode", "chromatic", "Color mode (chromatic|fire|aurora|mono)")
 		listDevs   = flag.Bool("list-audio-devices", false, "List available audio input devices and exit")
-		colorBurst = flag.Bool("color-on-audio", true, "Fade from monochrome to color based on audio energy")
 		noColor    = flag.Bool("no-color", false, "Disable ANSI color output")
 		quality    = flag.String("quality", "balanced", "Quality preset (auto|high|balanced|eco)")
 		autoRandom = flag.Bool("auto-randomize", true, "Automatically randomize visuals periodically")
@@ -97,13 +96,13 @@ func main() {
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
-	
+
 	// ensure terminal is restored on any exit (including panic)
 	defer func() {
 		// restore terminal state
-		fmt.Print("\x1b[?25h") // show cursor
+		fmt.Print("\x1b[?25h")   // show cursor
 		fmt.Print("\x1b[?1049l") // exit alternate screen
-		fmt.Print("\x1b[0m") // reset colors
+		fmt.Print("\x1b[0m")     // reset colors
 	}()
 
 	logger := log.New(os.Stdout, "[golizer] ", log.LstdFlags)
@@ -205,6 +204,9 @@ func main() {
 		if !flagIsPassed("height") && savedConfig.Height > 0 {
 			*height = savedConfig.Height
 		}
+		if !flagIsPassed("status") {
+			*showStatus = savedConfig.ShowStatusBar
+		}
 	}
 
 	appConfig := app.Config{
@@ -218,7 +220,6 @@ func main() {
 		Palette:        paletteName,
 		Pattern:        patternName,
 		ColorMode:      colorModeName,
-		ColorOnAudio:   *colorBurst,
 		UseANSI:        !*noColor,
 		Quality:        qualityName,
 		AutoRandomize:  *autoRandom,
@@ -247,9 +248,6 @@ func main() {
 	// apply saved parameters if config was loaded
 	if savedConfig != nil {
 		a.SetParams(savedConfig.Params)
-		if savedConfig.ColorOnAudio {
-			a.GetRenderer().Configure(savedConfig.Palette, savedConfig.Pattern, savedConfig.ColorMode, true)
-		}
 	}
 
 	// start web server automatically (unless disabled)
@@ -260,10 +258,10 @@ func main() {
 				logger.Printf("web server error: %v", err)
 			}
 		}()
-		
+
 		// try to setup mDNS automatically
 		go setupMDNS(*webPort, logger)
-		
+
 		// get local IP for display
 		localIP := getLocalIP()
 		logger.Printf("web control panel:")
@@ -272,7 +270,7 @@ func main() {
 			logger.Printf("  network: http://%s:%d", localIP, *webPort)
 		}
 		logger.Printf("  mDNS:   http://golizer.local:%d (if configured)", *webPort)
-		
+
 		// set web panel URL in renderer status bar
 		if *showWebURL {
 			webURL := fmt.Sprintf("http://localhost:%d", *webPort)
@@ -483,17 +481,17 @@ func getLocalIP() string {
 
 // saved config type (matches web.SavedConfig)
 type savedConfig struct {
-	Params       params.Parameters `json:"params"`
-	Palette      string            `json:"palette"`
-	Pattern      string            `json:"pattern"`
-	ColorMode    string            `json:"colorMode"`
-	ColorOnAudio bool              `json:"colorOnAudio"`
-	NoiseFloor   float64           `json:"noiseFloor"`
-	BufferSize   int               `json:"bufferSize"`
-	TargetFPS    float64           `json:"targetFPS"`
-	Quality      string            `json:"quality"`
-	Width        int               `json:"width"`
-	Height       int               `json:"height"`
+	Params        params.Parameters `json:"params"`
+	Palette       string            `json:"palette"`
+	Pattern       string            `json:"pattern"`
+	ColorMode     string            `json:"colorMode"`
+	NoiseFloor    float64           `json:"noiseFloor"`
+	BufferSize    int               `json:"bufferSize"`
+	TargetFPS     float64           `json:"targetFPS"`
+	Quality       string            `json:"quality"`
+	Width         int               `json:"width"`
+	Height        int               `json:"height"`
+	ShowStatusBar bool              `json:"showStatusBar"`
 }
 
 func getConfigPath() string {

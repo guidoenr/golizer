@@ -18,14 +18,14 @@ import (
 )
 
 type Server struct {
-	mu            sync.RWMutex
-	app           AppInterface
-	clients       map[*websocketClient]bool
-	broadcast     chan []byte
-	upgrader      websocket.Upgrader
-	lastFeatures  analyzer.Features
-	lastFPS       float64
-	lastParams    params.Parameters
+	mu                sync.RWMutex
+	app               AppInterface
+	clients           map[*websocketClient]bool
+	broadcast         chan []byte
+	upgrader          websocket.Upgrader
+	lastFeatures      analyzer.Features
+	lastFPS           float64
+	lastStatusPayload []byte
 }
 
 type AppInterface interface {
@@ -41,6 +41,7 @@ type AppInterface interface {
 	SetDimensions(int, int)
 	SetAutoRandomize(bool)
 	SetRandomInterval(time.Duration)
+	SetShowStatusBar(bool)
 }
 
 type websocketClient struct {
@@ -50,33 +51,33 @@ type websocketClient struct {
 }
 
 type StatusResponse struct {
-	FPS      float64            `json:"fps"`
-	Features analyzer.Features  `json:"features"` // only for display, not configurable
-	Renderer RendererStatus     `json:"renderer"`
-	Quality  string             `json:"quality,omitempty"`
+	FPS           float64           `json:"fps"`
+	Features      analyzer.Features `json:"features"` // only for display, not configurable
+	Renderer      RendererStatus    `json:"renderer"`
+	Quality       string            `json:"quality,omitempty"`
+	ShowStatusBar bool              `json:"showStatusBar"`
 }
 
 type RendererStatus struct {
-	Palette      string `json:"palette"`
-	Pattern      string `json:"pattern"`
-	ColorMode    string `json:"colorMode"`
-	ColorOnAudio bool   `json:"colorOnAudio"`
+	Palette   string `json:"palette"`
+	Pattern   string `json:"pattern"`
+	ColorMode string `json:"colorMode"`
 }
 
 type UpdateRequest struct {
-	Params      *params.Parameters `json:"params,omitempty"`
-	Palette     *string            `json:"palette,omitempty"`
-	Pattern     *string            `json:"pattern,omitempty"`
-	ColorMode   *string            `json:"colorMode,omitempty"`
-	ColorOnAudio *bool             `json:"colorOnAudio,omitempty"`
-	Quality     *string            `json:"quality,omitempty"`
-	NoiseFloor  *float64           `json:"noiseFloor,omitempty"`
-	BufferSize  *int               `json:"bufferSize,omitempty"`
+	Params     *params.Parameters `json:"params,omitempty"`
+	Palette    *string            `json:"palette,omitempty"`
+	Pattern    *string            `json:"pattern,omitempty"`
+	ColorMode  *string            `json:"colorMode,omitempty"`
+	Quality    *string            `json:"quality,omitempty"`
+	NoiseFloor *float64           `json:"noiseFloor,omitempty"`
+	BufferSize *int               `json:"bufferSize,omitempty"`
 	// TargetFPS removed - FPS always unlimited
-	Width       *int               `json:"width,omitempty"`
-	Height      *int               `json:"height,omitempty"`
-	AutoRandomize *bool            `json:"autoRandomize,omitempty"`
-	RandomInterval *int            `json:"randomInterval,omitempty"`
+	Width          *int  `json:"width,omitempty"`
+	Height         *int  `json:"height,omitempty"`
+	AutoRandomize  *bool `json:"autoRandomize,omitempty"`
+	RandomInterval *int  `json:"randomInterval,omitempty"`
+	ShowStatusBar  *bool `json:"showStatusBar,omitempty"`
 }
 
 type SavedConfig struct {
@@ -84,7 +85,6 @@ type SavedConfig struct {
 	Palette        string            `json:"palette"`
 	Pattern        string            `json:"pattern"`
 	ColorMode      string            `json:"colorMode"`
-	ColorOnAudio   bool              `json:"colorOnAudio"`
 	NoiseFloor     float64           `json:"noiseFloor"`
 	BufferSize     int               `json:"bufferSize"`
 	TargetFPS      float64           `json:"targetFPS"`
@@ -93,6 +93,7 @@ type SavedConfig struct {
 	Height         int               `json:"height"`
 	AutoRandomize  bool              `json:"autoRandomize"`
 	RandomInterval time.Duration     `json:"randomInterval"`
+	ShowStatusBar  bool              `json:"showStatusBar"`
 }
 
 func NewServer(app AppInterface) *Server {
@@ -137,7 +138,7 @@ func findWebDir() string {
 func (s *Server) Start(port int) error {
 	// find web directory (could be in repo root or relative to binary)
 	webDir := findWebDir()
-	
+
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, webDir+"/index.html")
 	})
@@ -161,25 +162,29 @@ func (s *Server) Start(port int) error {
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	w.Header().Set("Content-Type", "application/json")
 
-	renderer := s.app.GetRenderer()
-	cfg := s.app.GetConfig()
-	status := StatusResponse{
-		FPS:      s.lastFPS,
-		Features: s.lastFeatures,
-		Renderer: RendererStatus{
-			Palette:      renderer.PaletteName(),
-			Pattern:      renderer.PatternName(),
-			ColorMode:    renderer.ColorModeName(),
-			ColorOnAudio: renderer.ColorOnAudio(),
-		},
-		Quality: cfg.Quality(),
+	s.mu.RLock()
+	payload := s.lastStatusPayload
+	s.mu.RUnlock()
+
+	if payload != nil {
+		w.Write(payload)
+		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(status)
+	status := s.buildStatusSnapshot()
+	data, err := json.Marshal(status)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to encode status: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	s.mu.Lock()
+	s.lastStatusPayload = data
+	s.mu.Unlock()
+
+	w.Write(data)
 }
 
 func (s *Server) handleUpdate(w http.ResponseWriter, r *http.Request) {
@@ -235,11 +240,10 @@ func (s *Server) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	renderer := s.app.GetRenderer()
-	if req.Palette != nil || req.Pattern != nil || req.ColorMode != nil || req.ColorOnAudio != nil {
+	if req.Palette != nil || req.Pattern != nil || req.ColorMode != nil {
 		palette := renderer.PaletteName()
 		pattern := renderer.PatternName()
 		colorMode := renderer.ColorModeName()
-		colorOnAudio := renderer.ColorOnAudio()
 
 		if req.Palette != nil {
 			palette = *req.Palette
@@ -250,11 +254,8 @@ func (s *Server) handleUpdate(w http.ResponseWriter, r *http.Request) {
 		if req.ColorMode != nil {
 			colorMode = *req.ColorMode
 		}
-		if req.ColorOnAudio != nil {
-			colorOnAudio = *req.ColorOnAudio
-		}
 
-		renderer.Configure(palette, pattern, colorMode, colorOnAudio)
+		renderer.Configure(palette, pattern, colorMode, renderer.ColorOnAudio())
 	}
 
 	// update app config if provided
@@ -285,6 +286,9 @@ func (s *Server) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	if req.RandomInterval != nil {
 		s.app.SetRandomInterval(time.Duration(*req.RandomInterval) * time.Second)
 	}
+	if req.ShowStatusBar != nil {
+		s.app.SetShowStatusBar(*req.ShowStatusBar)
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
@@ -304,19 +308,19 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 
 	// get current config from app
 	config := SavedConfig{
-		Params:       currentParams,
-		Palette:      renderer.PaletteName(),
-		Pattern:      renderer.PatternName(),
-		ColorMode:    renderer.ColorModeName(),
-		ColorOnAudio: renderer.ColorOnAudio(),
-		NoiseFloor:   cfg.NoiseFloor(),
-		BufferSize:   cfg.BufferSize(),
-		TargetFPS:    0, // always unlimited
+		Params:         currentParams,
+		Palette:        renderer.PaletteName(),
+		Pattern:        renderer.PatternName(),
+		ColorMode:      renderer.ColorModeName(),
+		NoiseFloor:     cfg.NoiseFloor(),
+		BufferSize:     cfg.BufferSize(),
+		TargetFPS:      0, // always unlimited
 		Quality:        cfg.Quality(),
 		Width:          cfg.Width(),
 		Height:         cfg.Height(),
 		AutoRandomize:  cfg.AutoRandomize(),
 		RandomInterval: cfg.RandomInterval(),
+		ShowStatusBar:  cfg.ShowStatusBar(),
 	}
 
 	// override with values from request if provided
@@ -350,6 +354,7 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 		if req.Params.Frequency > 0 {
 			config.Params = req.Params
 		}
+		config.ShowStatusBar = req.ShowStatusBar
 	}
 
 	// save to file
@@ -434,20 +439,17 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) broadcastLoop() {
-	for {
-		select {
-		case message := <-s.broadcast:
-			s.mu.RLock()
-			for client := range s.clients {
-				select {
-				case client.send <- message:
-				default:
-					close(client.send)
-					delete(s.clients, client)
-				}
+	for message := range s.broadcast {
+		s.mu.RLock()
+		for client := range s.clients {
+			select {
+			case client.send <- message:
+			default:
+				close(client.send)
+				delete(s.clients, client)
 			}
-			s.mu.RUnlock()
 		}
+		s.mu.RUnlock()
 	}
 }
 
@@ -462,29 +464,53 @@ func (s *Server) statusUpdateLoop() {
 		s.lastFPS = s.app.GetFPS()
 		renderer := s.app.GetRenderer()
 		currentRenderer := RendererStatus{
-			Palette:      renderer.PaletteName(),
-			Pattern:      renderer.PatternName(),
-			ColorMode:    renderer.ColorModeName(),
-			ColorOnAudio: renderer.ColorOnAudio(),
+			Palette:   renderer.PaletteName(),
+			Pattern:   renderer.PatternName(),
+			ColorMode: renderer.ColorModeName(),
 		}
 		cfg := s.app.GetConfig()
-		s.mu.Unlock()
 
 		status := StatusResponse{
-			FPS:      s.lastFPS,
-			Features: s.lastFeatures, // only for display stats
-			Renderer: currentRenderer,
-			Quality:  cfg.Quality(),
+			FPS:           s.lastFPS,
+			Features:      s.lastFeatures, // only for display stats
+			Renderer:      currentRenderer,
+			Quality:       cfg.Quality(),
+			ShowStatusBar: cfg.ShowStatusBar(),
 		}
+		s.mu.Unlock()
 
 		data, err := json.Marshal(status)
 		if err == nil {
+			s.mu.Lock()
+			s.lastStatusPayload = data
+			s.mu.Unlock()
+
 			select {
 			case s.broadcast <- data:
 			default:
 				// drop if channel full (non-blocking)
 			}
 		}
+	}
+}
+
+func (s *Server) buildStatusSnapshot() StatusResponse {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	renderer := s.app.GetRenderer()
+	cfg := s.app.GetConfig()
+
+	return StatusResponse{
+		FPS:      s.lastFPS,
+		Features: s.lastFeatures,
+		Renderer: RendererStatus{
+			Palette:   renderer.PaletteName(),
+			Pattern:   renderer.PatternName(),
+			ColorMode: renderer.ColorModeName(),
+		},
+		Quality:       cfg.Quality(),
+		ShowStatusBar: cfg.ShowStatusBar(),
 	}
 }
 
@@ -549,4 +575,3 @@ func (c *websocketClient) writePump() {
 		}
 	}
 }
-
