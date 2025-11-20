@@ -30,7 +30,7 @@ func main() {
 		deviceName = flag.String("audio-device", "", "Optional PortAudio device name (substring match)")
 		width      = flag.Int("width", 120, "Frame width (ASCII columns or SDL resolution)")
 		height     = flag.Int("height", 40, "Frame height (ASCII rows or SDL resolution)")
-		targetFPS  = flag.Float64("fps", 0, "Target frames per second (0 = unlimited)")
+		// FPS removed - always unlimited, each machine runs at its max
 		bufferSize = flag.Int("buffer-size", 2048, "FFT buffer size (power of two recommended)")
 		noAudio    = flag.Bool("no-audio", false, "Run with synthetic audio (for testing)")
 		debug      = flag.Bool("debug", false, "Enable verbose logging")
@@ -77,9 +77,8 @@ func main() {
 		log.Fatalf("invalid dimensions: width=%d height=%d", *width, *height)
 	}
 
-	if *targetFPS < 0 {
-		log.Fatalf("fps must be positive or 0 for unlimited (got %.2f)", *targetFPS)
-	}
+	// FPS always unlimited
+	targetFPSValue := 0.0
 
 	if *bufferSize <= 0 {
 		log.Fatalf("buffer-size must be positive (got %d)", *bufferSize)
@@ -166,10 +165,8 @@ func main() {
 		colorModeName = "chromatic"
 	}
 
-	targetFPSValue := *targetFPS
-	if !flagIsPassed("fps") || targetFPSValue == 0 {
-		targetFPSValue = defaultFPSForQuality(qualityName)
-	}
+	// FPS always unlimited - let each machine run at max
+	targetFPSValue = 0.0 // always unlimited
 
 	if strings.EqualFold(*palette, "auto") || strings.TrimSpace(*palette) == "" {
 		logger.Printf("palette auto -> %s", paletteName)
@@ -198,9 +195,7 @@ func main() {
 		if !flagIsPassed("buffer-size") && savedConfig.BufferSize > 0 {
 			*bufferSize = savedConfig.BufferSize
 		}
-		if !flagIsPassed("fps") && savedConfig.TargetFPS > 0 {
-			targetFPSValue = savedConfig.TargetFPS
-		}
+		// FPS always unlimited - ignore saved FPS
 		if !flagIsPassed("quality") && savedConfig.Quality != "" {
 			qualityName = savedConfig.Quality
 		}
@@ -237,12 +232,7 @@ func main() {
 		Log:            logger,
 	}
 
-	if appConfig.Quality == "eco" && !flagIsPassed("fps") && appConfig.TargetFPS > 48 {
-		appConfig.TargetFPS = 48
-	}
-	if appConfig.Quality == "balanced" && !flagIsPassed("fps") && appConfig.TargetFPS > 90 {
-		appConfig.TargetFPS = 90
-	}
+	// FPS always unlimited - removed quality-based FPS limits
 
 	a, err := app.New(appConfig)
 	if err != nil {
@@ -368,16 +358,7 @@ func resolvePatternName(requested string, quality string) string {
 	return name
 }
 
-func defaultFPSForQuality(quality string) float64 {
-	switch quality {
-	case "eco":
-		return 48
-	case "balanced":
-		return 90
-	default:
-		return 1000
-	}
-}
+// FPS function removed - always unlimited
 
 func flagIsPassed(name string) bool {
 	found := false

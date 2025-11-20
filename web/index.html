@@ -78,16 +78,15 @@
 				<section class="card">
 					<h2>performance</h2>
 					<div class="control-group">
-						<label>target fps <span id="targetFPSValue">90</span></label>
-						<input
-							type="range"
-							id="targetFPS"
-							min="0"
-							max="120"
-							step="1"
-							value="90"
-						/>
-						<small>0 = unlimited</small>
+						<label
+							>current fps:
+							<span
+								id="fps-display"
+								style="color: var(--accent); font-weight: bold"
+								>--</span
+							></label
+						>
+						<small>unlimited - each machine runs at max</small>
 					</div>
 					<div class="control-group">
 						<label>quality</label>

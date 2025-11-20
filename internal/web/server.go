@@ -37,7 +37,7 @@ type AppInterface interface {
 	GetConfig() apppkg.ConfigGetter
 	SetNoiseFloor(float64)
 	SetBufferSize(int)
-	SetTargetFPS(float64)
+	// SetTargetFPS removed - FPS always unlimited
 	SetDimensions(int, int)
 	SetAutoRandomize(bool)
 	SetRandomInterval(time.Duration)
@@ -72,7 +72,7 @@ type UpdateRequest struct {
 	Quality     *string            `json:"quality,omitempty"`
 	NoiseFloor  *float64           `json:"noiseFloor,omitempty"`
 	BufferSize  *int               `json:"bufferSize,omitempty"`
-	TargetFPS   *float64           `json:"targetFPS,omitempty"`
+	// TargetFPS removed - FPS always unlimited
 	Width       *int               `json:"width,omitempty"`
 	Height      *int               `json:"height,omitempty"`
 	AutoRandomize *bool            `json:"autoRandomize,omitempty"`
@@ -267,9 +267,7 @@ func (s *Server) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	if req.BufferSize != nil {
 		s.app.SetBufferSize(*req.BufferSize)
 	}
-	if req.TargetFPS != nil {
-		s.app.SetTargetFPS(*req.TargetFPS)
-	}
+	// TargetFPS removed - FPS always unlimited
 	if req.Width != nil || req.Height != nil {
 		width := s.app.GetConfig().Width()
 		height := s.app.GetConfig().Height()
@@ -313,7 +311,7 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 		ColorOnAudio: renderer.ColorOnAudio(),
 		NoiseFloor:   cfg.NoiseFloor(),
 		BufferSize:   cfg.BufferSize(),
-		TargetFPS:    cfg.TargetFPS(),
+		TargetFPS:    0, // always unlimited
 		Quality:        cfg.Quality(),
 		Width:          cfg.Width(),
 		Height:         cfg.Height(),
@@ -339,9 +337,7 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 		if req.BufferSize > 0 {
 			config.BufferSize = req.BufferSize
 		}
-		if req.TargetFPS >= 0 {
-			config.TargetFPS = req.TargetFPS
-		}
+		// TargetFPS always 0 (unlimited) - ignore saved value
 		if req.Quality != "" {
 			config.Quality = req.Quality
 		}

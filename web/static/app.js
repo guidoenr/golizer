@@ -118,6 +118,11 @@ function startStatusPolling() {
 function updateUI(data) {
 	if (data.fps !== undefined) {
 		document.getElementById("fps").textContent = `${data.fps.toFixed(1)} fps`;
+		// also update performance section display
+		const fpsDisplay = document.getElementById("fps-display");
+		if (fpsDisplay) {
+			fpsDisplay.textContent = `${data.fps.toFixed(1)} fps`;
+		}
 	}
 
 	if (data.features) {
@@ -249,7 +254,6 @@ function setupControls() {
 	// other sliders with debounce
 	const sliders = [
 		"noiseFloor",
-		"targetFPS",
 		"width",
 		"height",
 		"speed",
@@ -329,7 +333,6 @@ function saveConfig() {
 		colorOnAudio: document.getElementById("colorOnAudio").checked,
 		noiseFloor: parseFloat(document.getElementById("noiseFloor").value),
 		bufferSize: parseInt(document.getElementById("bufferSize").value),
-		targetFPS: parseFloat(document.getElementById("targetFPS").value),
 		quality: getSelectedValue("quality-selector"),
 		width: parseInt(document.getElementById("width").value),
 		height: parseInt(document.getElementById("height").value),
@@ -426,10 +429,6 @@ function sendUpdate(updates) {
 	if (!updates.bufferSize) {
 		const bs = document.getElementById("bufferSize");
 		if (bs) config.bufferSize = parseInt(bs.value);
-	}
-	if (!updates.targetFPS) {
-		const tfps = document.getElementById("targetFPS");
-		if (tfps) config.targetFPS = parseFloat(tfps.value);
 	}
 	if (!updates.quality) {
 		const q = document.getElementById("quality-selector");
