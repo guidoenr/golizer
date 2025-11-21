@@ -584,24 +584,35 @@ func (a *App) maybeAutoRandomize() {
 	a.randomizeVisuals()
 }
 
+func extractIPAndPort(url string) string {
+	// Keep http:// or https:// prefix, extract only IP:PORT or hostname:PORT
+	if strings.HasPrefix(url, "https://") {
+		url = strings.TrimPrefix(url, "https://")
+		return "https://" + url
+	}
+	if strings.HasPrefix(url, "http://") {
+		url = strings.TrimPrefix(url, "http://")
+		return "http://" + url
+	}
+	// If no protocol, return as-is
+	return url
+}
+
 func (a *App) buildStatusLines(raw string, fps float64) []string {
 	width := a.width
 	temp, throttle := a.systemStats()
 
+	// Extract only IP:PORT from panel URL (keeping http://)
+	panelAddr := extractIPAndPort(a.panelURL)
+
 	entries := []statusEntry{
-		{label: "PANEL", value: a.panelURL},
+		{label: "PANEL", value: panelAddr},
 		{label: "TEMP", value: temp},
 		{label: "THROTTLE", value: throttle},
 		{label: "FPS", value: fmt.Sprintf("%.1f", fps)},
 	}
 
 	parts := strings.Split(raw, "|")
-	if len(parts) > 0 {
-		mode := strings.TrimSpace(parts[0])
-		if mode != "" {
-			entries = append(entries, statusEntry{label: "MODE", value: strings.ToUpper(mode)})
-		}
-	}
 	if len(parts) > 1 {
 		entries = append(entries, parseKeyValuePart(parts[1])...)
 	}
