@@ -98,8 +98,9 @@ func (a *Analyzer) Analyze(samples []float32, deltaTime float64) Features {
 	if beatStrength > 0.12 {
 		a.beatPulse = 1.0
 	}
-	a.beatPulse *= 0.78
-	beatStrength = math.Min(1.0, beatStrength+a.beatPulse*0.65)
+	// slower decay so beat pulse lasts longer
+	a.beatPulse *= 0.88
+	beatStrength = math.Min(1.0, beatStrength+a.beatPulse*0.7)
 
 	a.pushBass(bass)
 	isDrop := false

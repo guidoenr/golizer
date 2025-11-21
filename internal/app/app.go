@@ -585,7 +585,6 @@ func (a *App) maybeAutoRandomize() {
 }
 
 func extractIPAndPort(url string) string {
-	// Keep http:// or https:// prefix, extract only IP:PORT or hostname:PORT
 	if strings.HasPrefix(url, "https://") {
 		url = strings.TrimPrefix(url, "https://")
 		return "https://" + url
@@ -594,7 +593,6 @@ func extractIPAndPort(url string) string {
 		url = strings.TrimPrefix(url, "http://")
 		return "http://" + url
 	}
-	// If no protocol, return as-is
 	return url
 }
 
@@ -602,7 +600,6 @@ func (a *App) buildStatusLines(raw string, fps float64) []string {
 	width := a.width
 	temp, throttle := a.systemStats()
 
-	// Extract only IP:PORT from panel URL (keeping http://)
 	panelAddr := extractIPAndPort(a.panelURL)
 
 	entries := []statusEntry{
@@ -734,7 +731,11 @@ func selectAnalysisWindow(bufferSize int) int {
 	if bufferSize <= 0 {
 		bufferSize = 4096
 	}
-	window := bufferSize / 4
+	// smaller window = less latency, still good quality
+	window := bufferSize / 6
+	if window < 512 {
+		window = 512
+	}
 	if window < 256 {
 		window = 256
 	}
